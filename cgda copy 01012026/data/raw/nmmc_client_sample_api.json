@@ -1,0 +1,272 @@
+{
+  "source": "Client sample (API-like format)",
+  "notes": "This mimics a typical grievance listing API payload. Use nmmc_client_sample.csv for direct upload into CGDA.",
+  "records": [
+    {
+      "sr_no": 1,
+      "grievance_id": "NMMC/25/10690",
+      "created_datetime": "22-12-2025 09:52 AM",
+      "complainant_name": "Vikas Borhade",
+      "subject": "Cleaning",
+      "department": "Solid Waste Management",
+      "ward": "Turbhe",
+      "status": "CLOSED",
+      "closed_datetime": "24-12-2025 03:41 PM"
+    },
+    {
+      "sr_no": 2,
+      "grievance_id": "NMMC/25/10689",
+      "created_datetime": "22-12-2025 09:40 AM",
+      "complainant_name": "Prakash Dilpak",
+      "subject": "गतिरोधक बसविण्याबाबत",
+      "department": "City Engineer",
+      "ward": "Airoli",
+      "status": "CLOSED",
+      "closed_datetime": "22-12-2025 03:48 PM"
+    },
+    {
+      "sr_no": 3,
+      "grievance_id": "NMMC/25/10688",
+      "created_datetime": "22-12-2025 08:59 AM",
+      "complainant_name": "Shahbaz Sayyed",
+      "subject": "Drainage cap on road damaged",
+      "department": "City Engineer",
+      "ward": "Vashi",
+      "status": "CLOSED",
+      "closed_datetime": "26-12-2025 12:01 PM"
+    },
+    {
+      "sr_no": 4,
+      "grievance_id": "NMMC/25/10687",
+      "created_datetime": "22-12-2025 01:43 AM",
+      "complainant_name": "Akshay Sakpal",
+      "subject": "Street Light not working",
+      "department": "Electrical",
+      "ward": "Koparkhairane",
+      "status": "CLOSED",
+      "closed_datetime": "25-12-2025 02:42 PM"
+    },
+    {
+      "sr_no": 5,
+      "grievance_id": "NMMC/25/10681",
+      "created_datetime": "21-12-2025 08:54 PM",
+      "complainant_name": "Amar Kulkarni",
+      "subject": "Lots of vendors on footpath",
+      "department": "Encroachment",
+      "ward": "Turbhe",
+      "status": "CLOSED",
+      "closed_datetime": "22-12-2025 02:15 PM"
+    },
+    {
+      "sr_no": 6,
+      "grievance_id": "NMMC/25/10679",
+      "created_datetime": "21-12-2025 08:02 PM",
+      "complainant_name": "Ankush Khapre",
+      "subject": "Illegal parking on ground",
+      "department": "Encroachment",
+      "ward": "Koparkhairane",
+      "status": "CLOSED",
+      "closed_datetime": "29-12-2025 11:27 AM"
+    },
+    {
+      "sr_no": 7,
+      "grievance_id": "NMMC/25/10678",
+      "created_datetime": "21-12-2025 07:31 PM",
+      "complainant_name": "Vijay Devadiga",
+      "subject": "Abandoned senior citizen on footpath opposite society",
+      "department": "Encroachment",
+      "ward": "Turbhe",
+      "status": "CLOSED",
+      "closed_datetime": "22-12-2025 02:16 PM"
+    },
+    {
+      "sr_no": 8,
+      "grievance_id": "NMMC/25/10676",
+      "created_datetime": "21-12-2025 05:44 PM",
+      "complainant_name": "Nirbhay Mhatre",
+      "subject": "Sanitary Chamber Leakage",
+      "department": "Public Health Engineering",
+      "ward": "Koparkhairane",
+      "status": "CLOSED",
+      "closed_datetime": "22-12-2025 06:42 PM"
+    },
+    {
+      "sr_no": 9,
+      "grievance_id": "NMMC/25/10675",
+      "created_datetime": "21-12-2025 05:11 PM",
+      "complainant_name": "Rishabh Singh",
+      "subject": "Illegal and unscientific tree trimming and pruning.",
+      "department": "Garden",
+      "ward": "Belapur",
+      "status": "CLOSED",
+      "closed_datetime": "26-12-2025 12:18 PM"
+    },
+    {
+      "sr_no": 10,
+      "grievance_id": "NMMC/25/10673",
+      "created_datetime": "21-12-2025 01:50 PM",
+      "complainant_name": "Akshay Jagtap",
+      "subject": "इमारतीखाली साचणाऱ्या कचऱ्याबाबत तक्रार",
+      "department": "Solid Waste Management",
+      "ward": "Nerul",
+      "status": "CLOSED",
+      "closed_datetime": "30-12-2025 10:38 AM"
+    },
+    {
+      "sr_no": 11,
+      "grievance_id": "NMMC/25/10672",
+      "created_datetime": "21-12-2025 12:12 PM",
+      "complainant_name": "Neha Patil",
+      "subject": "Overflowing garbage bin near market; missed pickup",
+      "department": "Solid Waste Management",
+      "ward": "Vashi",
+      "status": "CLOSED",
+      "closed_datetime": "24-12-2025 04:05 PM"
+    },
+    {
+      "sr_no": 12,
+      "grievance_id": "NMMC/25/10670",
+      "created_datetime": "21-12-2025 10:08 AM",
+      "complainant_name": "Suresh Kadam",
+      "subject": "Open manhole on footpath causing danger",
+      "department": "City Engineer",
+      "ward": "Nerul",
+      "status": "CLOSED",
+      "closed_datetime": "23-12-2025 05:20 PM"
+    },
+    {
+      "sr_no": 13,
+      "grievance_id": "NMMC/25/10668",
+      "created_datetime": "20-12-2025 07:45 PM",
+      "complainant_name": "Farhan Shaikh",
+      "subject": "Water leakage from pipeline near building entrance",
+      "department": "Water Supply",
+      "ward": "Airoli",
+      "status": "CLOSED",
+      "closed_datetime": "27-12-2025 12:30 PM"
+    },
+    {
+      "sr_no": 14,
+      "grievance_id": "NMMC/25/10666",
+      "created_datetime": "20-12-2025 06:19 PM",
+      "complainant_name": "Smita More",
+      "subject": "Streetlight flickering for 1 week",
+      "department": "Electrical",
+      "ward": "Belapur",
+      "status": "CLOSED",
+      "closed_datetime": "22-12-2025 11:15 AM"
+    },
+    {
+      "sr_no": 15,
+      "grievance_id": "NMMC/25/10664",
+      "created_datetime": "20-12-2025 03:05 PM",
+      "complainant_name": "Deepak Pawar",
+      "subject": "Drain overflow with foul smell; needs cleaning",
+      "department": "Public Health Engineering",
+      "ward": "Koparkhairane",
+      "status": "CLOSED",
+      "closed_datetime": "28-12-2025 09:10 AM"
+    },
+    {
+      "sr_no": 16,
+      "grievance_id": "NMMC/25/10662",
+      "created_datetime": "20-12-2025 11:22 AM",
+      "complainant_name": "Anita Deshmukh",
+      "subject": "Noise complaint: loud music late night",
+      "department": "Noise",
+      "ward": "Nerul",
+      "status": "CLOSED",
+      "closed_datetime": "21-12-2025 04:40 PM"
+    },
+    {
+      "sr_no": 17,
+      "grievance_id": "NMMC/25/10660",
+      "created_datetime": "19-12-2025 09:18 AM",
+      "complainant_name": "Rohan Jadhav",
+      "subject": "Potholes on main road causing accidents",
+      "department": "City Engineer",
+      "ward": "Vashi",
+      "status": "CLOSED",
+      "closed_datetime": "30-12-2025 01:05 PM"
+    },
+    {
+      "sr_no": 18,
+      "grievance_id": "NMMC/25/10658",
+      "created_datetime": "19-12-2025 08:10 AM",
+      "complainant_name": "Pooja Naik",
+      "subject": "Stray dogs near school; safety concern",
+      "department": "Stray Animals",
+      "ward": "Belapur",
+      "status": "CLOSED",
+      "closed_datetime": "20-12-2025 02:22 PM"
+    },
+    {
+      "sr_no": 19,
+      "grievance_id": "NMMC/25/10656",
+      "created_datetime": "18-12-2025 06:33 PM",
+      "complainant_name": "Imran Khan",
+      "subject": "Encroachment: vendors blocking footpath repeatedly",
+      "department": "Encroachment",
+      "ward": "Airoli",
+      "status": "CLOSED",
+      "closed_datetime": "26-12-2025 06:10 PM"
+    },
+    {
+      "sr_no": 20,
+      "grievance_id": "NMMC/25/10654",
+      "created_datetime": "18-12-2025 03:02 PM",
+      "complainant_name": "Kiran Joshi",
+      "subject": "Water supply low pressure every morning",
+      "department": "Water Supply",
+      "ward": "Turbhe",
+      "status": "CLOSED",
+      "closed_datetime": "23-12-2025 01:55 PM"
+    },
+    {
+      "sr_no": 21,
+      "grievance_id": "NMMC/25/10652",
+      "created_datetime": "18-12-2025 11:41 AM",
+      "complainant_name": "Priya Sawant",
+      "subject": "Sanitation request: debris lying near school gate",
+      "department": "Solid Waste Management",
+      "ward": "Nerul",
+      "status": "CLOSED",
+      "closed_datetime": "19-12-2025 03:25 PM"
+    },
+    {
+      "sr_no": 22,
+      "grievance_id": "NMMC/25/10650",
+      "created_datetime": "17-12-2025 04:20 PM",
+      "complainant_name": "Ajay Shinde",
+      "subject": "Street light pole leaning; may fall",
+      "department": "Electrical",
+      "ward": "Turbhe",
+      "status": "CLOSED",
+      "closed_datetime": "22-12-2025 10:12 AM"
+    },
+    {
+      "sr_no": 23,
+      "grievance_id": "NMMC/25/10648",
+      "created_datetime": "17-12-2025 01:07 PM",
+      "complainant_name": "Nikita Kulkarni",
+      "subject": "Tree branch blocking road after wind; needs pruning",
+      "department": "Garden",
+      "ward": "Vashi",
+      "status": "CLOSED",
+      "closed_datetime": "18-12-2025 06:30 PM"
+    },
+    {
+      "sr_no": 24,
+      "grievance_id": "NMMC/25/10646",
+      "created_datetime": "16-12-2025 09:55 AM",
+      "complainant_name": "Swapnil Patil",
+      "subject": "Waterlogging after rain near bus stop",
+      "department": "City Engineer",
+      "ward": "Koparkhairane",
+      "status": "CLOSED",
+      "closed_datetime": "19-12-2025 05:05 PM"
+    }
+  ]
+}
+
+

@@ -1,0 +1,122 @@
+{
+  "run_id": "run_20251231T082705Z_3a5899c1",
+  "raw_filename": "20251231T082118Z_77fe0ef0_input_dataset_latest.csv",
+  "total_rows": 20,
+  "processed": 0,
+  "skipped": 20,
+  "failed": 0,
+  "summary": {
+    "top_categories": [
+      [
+        "Encroachment & Illegal Construction",
+        28
+      ],
+      [
+        "Public Health & Sanitation",
+        12
+      ],
+      [
+        "Solid Waste Management",
+        11
+      ],
+      [
+        "Street Lighting",
+        10
+      ],
+      [
+        "Other Civic Issues",
+        10
+      ],
+      [
+        "Sewerage & Drainage",
+        9
+      ],
+      [
+        "Property Tax & Revenue",
+        9
+      ],
+      [
+        "Water Supply",
+        8
+      ],
+      [
+        "Roads & Footpaths",
+        6
+      ],
+      [
+        "Parks & Public Spaces",
+        6
+      ]
+    ],
+    "top_subtopics": [
+      [
+        "General Civic Issue",
+        4
+      ],
+      [
+        "Low Water Pressure",
+        3
+      ],
+      [
+        "Footpath Encroachment",
+        3
+      ],
+      [
+        "Street Light Outage",
+        2
+      ],
+      [
+        "Stray Dog Menace",
+        2
+      ],
+      [
+        "Terrace Encroachment Issue",
+        2
+      ],
+      [
+        "Illegal Food Truck Parking",
+        2
+      ],
+      [
+        "Illegal Shop Construction",
+        2
+      ],
+      [
+        "Hillside Destruction Activity",
+        2
+      ],
+      [
+        "Construction Site Pollution",
+        2
+      ],
+      [
+        "Garbage Collection Issue",
+        1
+      ],
+      [
+        "Pipeline Leakage Issue",
+        1
+      ],
+      [
+        "Illegal Hawkers Encroachment",
+        1
+      ],
+      [
+        "Road Pothole Repair",
+        1
+      ],
+      [
+        "Drain Overflow Issue",
+        1
+      ]
+    ],
+    "checkpoint_rows": 120,
+    "token_usage": {
+      "prompt_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "by_model": {},
+      "note": "Token usage counts are reported by Gemini usageMetadata (only for calls made in this run)."
+    }
+  }
+}

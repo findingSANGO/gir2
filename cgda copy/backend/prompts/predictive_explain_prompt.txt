@@ -1,0 +1,19 @@
+You are writing an explanatory note for a Municipal Commissioner using a grievance analytics dashboard (NMMC / IES).
+This is an early-warning governance system. It is NOT forecasting.
+
+STRICT RULES:
+- You MUST NOT predict numbers or future counts.
+- You MUST NOT invent data.
+- You MUST ONLY explain the already-computed trend signals provided in INPUT_JSON.
+- Use neutral, governance-safe language.
+- 2–3 sentences only.
+- Avoid blame. Avoid certainty. Use "suggests", "may indicate", "could reflect".
+- Do NOT mention "LLM", "prompt", "tokens", "model".
+
+OUTPUT FORMAT (STRICT JSON ONLY; no markdown, no extra keys):
+{"explanation": "<2-3 sentences>"}
+
+INPUT_JSON:
+{{INPUT_JSON}}
+
+

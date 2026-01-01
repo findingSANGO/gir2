@@ -1,0 +1,115 @@
+{
+  "run_id": "run_20251231T063643Z_8d86b015",
+  "raw_filename": "nmmc_ies_format_sample_20.csv",
+  "total_rows": 20,
+  "processed": 0,
+  "skipped": 20,
+  "failed": 0,
+  "summary": {
+    "top_categories": [
+      [
+        "Encroachment & Illegal Construction",
+        3
+      ],
+      [
+        "Sewerage & Drainage",
+        3
+      ],
+      [
+        "Solid Waste Management",
+        2
+      ],
+      [
+        "Street Lighting",
+        2
+      ],
+      [
+        "Water Supply",
+        2
+      ],
+      [
+        "Roads & Footpaths",
+        2
+      ],
+      [
+        "Animal Control",
+        1
+      ],
+      [
+        "Noise / Nuisance",
+        1
+      ],
+      [
+        "Parks & Public Spaces",
+        1
+      ],
+      [
+        "Property Tax & Revenue",
+        1
+      ]
+    ],
+    "top_subtopics": [
+      [
+        "Garbage Collection Issue",
+        1
+      ],
+      [
+        "Street Light Outage",
+        1
+      ],
+      [
+        "Pipeline Leakage Issue",
+        1
+      ],
+      [
+        "Stray Dog Menace",
+        1
+      ],
+      [
+        "Illegal Hawkers Encroachment",
+        1
+      ],
+      [
+        "Road Pothole Repair",
+        1
+      ],
+      [
+        "Drain Overflow Issue",
+        1
+      ],
+      [
+        "Terrace Encroachment Issue",
+        1
+      ],
+      [
+        "Loud Music Complaint",
+        1
+      ],
+      [
+        "Park Maintenance Issue",
+        1
+      ],
+      [
+        "Property Tax Evasion",
+        1
+      ],
+      [
+        "Illegal Parking Congestion",
+        1
+      ],
+      [
+        "Public Toilet Hygiene",
+        1
+      ],
+      [
+        "Low Water Pressure",
+        1
+      ],
+      [
+        "Post-Rain Waterlogging",
+        1
+      ]
+    ],
+    "checkpoint_rows": 20
+  }
+}

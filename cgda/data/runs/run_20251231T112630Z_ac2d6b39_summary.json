@@ -1,0 +1,122 @@
+{
+  "run_id": "run_20251231T112630Z_ac2d6b39",
+  "raw_filename": "20251231T082118Z_77fe0ef0_input_dataset_latest.csv",
+  "total_rows": 20,
+  "processed": 0,
+  "skipped": 20,
+  "failed": 0,
+  "summary": {
+    "top_categories": [
+      [
+        "Encroachment & Illegal Construction",
+        1697
+      ],
+      [
+        "Water Supply",
+        1283
+      ],
+      [
+        "Roads & Footpaths",
+        1038
+      ],
+      [
+        "Sewerage & Drainage",
+        1030
+      ],
+      [
+        "Street Lighting",
+        905
+      ],
+      [
+        "Public Health & Sanitation",
+        888
+      ],
+      [
+        "Property Tax & Revenue",
+        863
+      ],
+      [
+        "Traffic & Transport",
+        838
+      ],
+      [
+        "Solid Waste Management",
+        816
+      ],
+      [
+        "Parks & Public Spaces",
+        712
+      ]
+    ],
+    "top_subtopics": [
+      [
+        "Street Light Outage",
+        137
+      ],
+      [
+        "General Civic Issue",
+        126
+      ],
+      [
+        "Street Light Not Working",
+        113
+      ],
+      [
+        "Low Water Pressure",
+        105
+      ],
+      [
+        "Street Light Repair",
+        100
+      ],
+      [
+        "Insufficient Water Supply",
+        89
+      ],
+      [
+        "No Water Supply",
+        72
+      ],
+      [
+        "Garbage Collection Issue",
+        70
+      ],
+      [
+        "Street Light Malfunction",
+        70
+      ],
+      [
+        "Low Water Supply",
+        68
+      ],
+      [
+        "Water Supply Shortage",
+        65
+      ],
+      [
+        "Footpath Encroachment Issue",
+        64
+      ],
+      [
+        "Street Lights Not Working",
+        62
+      ],
+      [
+        "Inadequate Water Supply",
+        60
+      ],
+      [
+        "Mosquito Infestation Issue",
+        46
+      ]
+    ],
+    "checkpoint_rows": 11123,
+    "token_usage": {
+      "prompt_tokens": 0,
+      "output_tokens": 0,
+      "total_tokens": 0,
+      "by_model": {},
+      "note": "Token usage counts are reported by Gemini usageMetadata (only for calls made in this run)."
+    }
+  }
+}

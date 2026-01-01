@@ -1,0 +1,19 @@
+You are producing a short Commissioner-ready summary for a Municipal Corporation.
+
+Return JSON ONLY with EXACT keys:
+{
+  "summary_bullets": [
+    "..."
+  ]
+}
+
+Rules:
+- 3 to 5 bullets only.
+- Evidence-oriented, neutral language.
+- Mention wards/categories/buckets if present.
+- No ML jargon.
+
+Analytics input:
+{{INPUT_JSON}}
+
+

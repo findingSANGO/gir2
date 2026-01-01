@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      # Persist DB + data under mounted /app/data
+      DATABASE_URL: sqlite:////app/data/processed/cgda.db
+      DATA_RAW_DIR: /app/data/raw
+      DATA_PROCESSED_DIR: /app/data/processed
+      DATA_RUNS_DIR: /app/data/runs
+      SAMPLE_CSV_PATH: /app/data/raw/sample_grievances.csv
+      # For real NMMC files dropped into data/raw, keep seeding off to avoid mixing demo data.
+      SEED_SAMPLE_DATA: "false"
+      # Keep false for normal use; set true only if you intentionally want to wipe and recreate the SQLite DB.
+      RECREATE_DB_ON_STARTUP: "false"
+      CORS_ORIGINS: http://localhost:3000
+      # Free-tier Gemini config is sourced from ../.env (only manual step is pasting GEMINI_API_KEY there)
+    volumes:
+      - ../data:/app/data
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+

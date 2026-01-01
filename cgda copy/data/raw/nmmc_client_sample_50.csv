@@ -1,0 +1,52 @@
+Sr.no,Grievance Id,Date,Complainant Name,Subject,Department,Ward,Status,Closed date
+1,NMMC/26/12001,02-01-2026 09:12 AM,Rahul Patil,Garbage not picked for 3 days near market,Solid Waste Management,Vashi,CLOSED,04-01-2026 02:35 PM
+2,NMMC/26/12002,02-01-2026 09:45 AM,Pooja Naik,Street light not working near school,Electrical,Nerul,CLOSED,03-01-2026 06:10 PM
+3,NMMC/26/12003,02-01-2026 10:18 AM,Imran Khan,Drain overflow with foul smell in lane,Public Health Engineering,Koparkhairane,CLOSED,06-01-2026 11:05 AM
+4,NMMC/26/12004,02-01-2026 10:40 AM,Smita More,Potholes on main road causing accidents,City Engineer,Airoli,CLOSED,12-01-2026 04:22 PM
+5,NMMC/26/12005,02-01-2026 11:05 AM,Suresh Kadam,Water supply low pressure every morning,Water Supply,Turbhe,CLOSED,05-01-2026 01:15 PM
+6,NMMC/26/12006,02-01-2026 11:28 AM,Akshay Jagtap,Illegal vendors blocking footpath,Encroachment,Turbhe,CLOSED,08-01-2026 12:40 PM
+7,NMMC/26/12007,02-01-2026 12:10 PM,Neha Patil,Mosquito breeding due to stagnant water; fogging required,Public Health,Nerul,CLOSED,06-01-2026 05:30 PM
+8,NMMC/26/12008,02-01-2026 01:35 PM,Farhan Shaikh,Water leakage from pipeline near building entrance,Water Supply,Belapur,CLOSED,09-01-2026 03:25 PM
+9,NMMC/26/12009,02-01-2026 02:05 PM,Vikas Borhade,Debris lying near bus stop; please clear,Solid Waste Management,Koparkhairane,CLOSED,03-01-2026 04:05 PM
+10,NMMC/26/12010,02-01-2026 03:20 PM,Rishabh Singh,Tree branch blocking road after wind; needs pruning,Garden,Vashi,CLOSED,03-01-2026 06:45 PM
+11,NMMC/26/12011,03-01-2026 09:05 AM,Anita Deshmukh,Noise complaint: loud music late night,Noise,Nerul,CLOSED,04-01-2026 12:10 PM
+12,NMMC/26/12012,03-01-2026 09:42 AM,Shahbaz Sayyed,Drainage cover missing on road; dangerous,City Engineer,Vashi,CLOSED,06-01-2026 01:55 PM
+13,NMMC/26/12013,03-01-2026 10:25 AM,Prakash Dilpak,गतिरोधक बसविण्याबाबत,City Engineer,Airoli,CLOSED,05-01-2026 05:20 PM
+14,NMMC/26/12014,03-01-2026 11:00 AM,Ajay Shinde,Street light pole leaning; may fall,Electrical,Turbhe,CLOSED,07-01-2026 10:40 AM
+15,NMMC/26/12015,03-01-2026 11:22 AM,Nirbhay Mhatre,Sanitary chamber leakage near society gate,Public Health Engineering,Koparkhairane,CLOSED,05-01-2026 07:05 PM
+16,NMMC/26/12016,03-01-2026 12:15 PM,Amar Kulkarni,Illegal parking on ground; blocking access,Encroachment,Koparkhairane,CLOSED,10-01-2026 11:30 AM
+17,NMMC/26/12017,03-01-2026 01:05 PM,Nikita Kulkarni,Overflowing garbage bin near temple,Solid Waste Management,Belapur,CLOSED,04-01-2026 03:55 PM
+18,NMMC/26/12018,03-01-2026 02:48 PM,Swapnil Patil,Waterlogging after rain near bus stop,City Engineer,Koparkhairane,CLOSED,06-01-2026 05:15 PM
+19,NMMC/26/12019,03-01-2026 03:25 PM,Priya Sawant,Stray dogs near school; safety concern,Stray Animals,Belapur,CLOSED,04-01-2026 06:05 PM
+20,NMMC/26/12020,03-01-2026 04:10 PM,Deepak Pawar,Streetlights flickering in the lane,Streetlights,Airoli,CLOSED,06-01-2026 12:25 PM
+21,NMMC/26/12021,04-01-2026 09:35 AM,Kiran Joshi,No water supply since yesterday night,Water Supply,Turbhe,OPEN,
+22,NMMC/26/12022,04-01-2026 10:05 AM,Rohan Jadhav,Road patchwork poor quality; potholes back again,Roads,Vashi,OPEN,
+23,NMMC/26/12023,04-01-2026 10:48 AM,Smita More,Garbage dumping in open plot; foul smell,Solid Waste Management,Nerul,OPEN,
+24,NMMC/26/12024,04-01-2026 11:20 AM,Farhan Shaikh,Drain cleaning delayed; waterlogging continues,Drainage,Airoli,OPEN,
+25,NMMC/26/12025,04-01-2026 12:05 PM,Ankush Khapre,Encroachment complaints closed without action; vendors returned,Encroachment,Turbhe,OPEN,
+26,NMMC/26/12026,04-01-2026 01:10 PM,Neha Patil,Mosquito issue recurring; fogging delayed again,Public Health,Vashi,OPEN,
+27,NMMC/26/12027,04-01-2026 02:40 PM,Akshay Sakpal,Street light not working on main road,Electrical,Koparkhairane,OPEN,
+28,NMMC/26/12028,04-01-2026 03:15 PM,Rahul Patil,Open manhole on footpath causing danger,City Engineer,Nerul,OPEN,
+29,NMMC/26/12029,04-01-2026 04:05 PM,Pooja Naik,Construction noise after 11 PM; please stop,Noise,Belapur,OPEN,
+30,NMMC/26/12030,05-01-2026 09:18 AM,Imran Khan,Water pipeline leak near gate; road not restored properly,Water Supply,Airoli,CLOSED,09-01-2026 02:10 PM
+31,NMMC/26/12031,05-01-2026 09:55 AM,Suresh Kadam,Garbage pickup irregular; missed in last week,Sanitation,Turbhe,CLOSED,07-01-2026 03:40 PM
+32,NMMC/26/12032,05-01-2026 10:30 AM,Vikas Borhade,Roadside drain blocked; smell and overflow,Drainage,Vashi,CLOSED,11-01-2026 01:05 PM
+33,NMMC/26/12033,05-01-2026 11:05 AM,Rishabh Singh,Illegal tree trimming; branches left on road,Garden,Belapur,CLOSED,06-01-2026 05:55 PM
+34,NMMC/26/12034,05-01-2026 12:22 PM,Prakash Dilpak,रस्त्यावर खड्डे दुरुस्तीबाबत तक्रार,City Engineer,Airoli,CLOSED,16-01-2026 04:18 PM
+35,NMMC/26/12035,05-01-2026 01:40 PM,Ajay Shinde,Streetlight repaired earlier but not working again,Streetlights,Turbhe,CLOSED,08-01-2026 12:15 PM
+36,NMMC/26/12036,05-01-2026 02:10 PM,Nirbhay Mhatre,Sewage overflow near society; urgent cleaning,Public Health Engineering,Koparkhairane,CLOSED,14-01-2026 09:50 AM
+37,NMMC/26/12037,05-01-2026 03:05 PM,Amar Kulkarni,Footpath occupied by hawkers; difficult for senior citizens,Encroachment,Nerul,CLOSED,13-01-2026 05:10 PM
+38,NMMC/26/12038,05-01-2026 03:55 PM,Anita Deshmukh,Noise from construction early morning,Noise,Vashi,CLOSED,06-01-2026 02:30 PM
+39,NMMC/26/12039,06-01-2026 09:08 AM,Nikita Kulkarni,Garbage collection vehicle not coming to lane,Solid Waste Management,Belapur,CLOSED,07-01-2026 01:25 PM
+40,NMMC/26/12040,06-01-2026 10:12 AM,Swapnil Patil,Waterlogging due to clogged drains,Drainage,Koparkhairane,CLOSED,15-01-2026 04:45 PM
+41,NMMC/26/12041,06-01-2026 11:05 AM,Priya Sawant,Stray dog bite risk near park,Stray Animals,Nerul,CLOSED,08-01-2026 04:05 PM
+42,NMMC/26/12042,06-01-2026 11:55 AM,Rohan Jadhav,Street light flickering near highway,Electrical,Airoli,CLOSED,09-01-2026 07:00 PM
+43,NMMC/26/12043,06-01-2026 12:40 PM,Smita More,Road repair took too long earlier; request status update,Roads,Vashi,OPEN,
+44,NMMC/26/12044,06-01-2026 01:25 PM,Farhan Shaikh,Water supply completely stopped in area,Water Supply,Turbhe,OPEN,
+45,NMMC/26/12045,06-01-2026 02:05 PM,Deepak Pawar,Garbage burning causing smoke; take action,Public Health,Belapur,OPEN,
+46,NMMC/26/12046,06-01-2026 03:15 PM,Imran Khan,Encroachment on footpath near station,Encroachment,Vashi,OPEN,
+47,NMMC/26/12047,07-01-2026 09:05 AM,Rahul Patil,Drainage cap damaged again on same road,City Engineer,Vashi,OPEN,
+48,NMMC/26/12048,07-01-2026 10:10 AM,Pooja Naik,Street light not working near bus stop,Streetlights,Nerul,OPEN,
+49,NMMC/26/12049,07-01-2026 11:35 AM,Suresh Kadam,Overflowing bin not cleaned; repeated complaint,Solid Waste Management,Airoli,OPEN,
+50,NMMC/26/12050,07-01-2026 02:05 PM,Neha Patil,Mosquito fogging not done after rain,Public Health,Nerul,OPEN,
+

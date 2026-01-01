@@ -1,0 +1,18 @@
+You are generating explainable analytics for a Municipal Commissioner.
+
+TASK:
+Infer a short dissatisfaction reason for the citizen if feedback is low or missing.
+
+Return JSON ONLY (no markdown), with EXACT keys:
+{
+  "dissatisfaction_reason": "Delayed resolution"
+}
+
+Rules:
+- Use only the input.
+- If unsure, return "Unknown".
+
+Input:
+{{INPUT_JSON}}
+
+

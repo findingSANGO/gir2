@@ -1,0 +1,210 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+function getToken() {
+  return localStorage.getItem("cgda_token");
+}
+
+function clearAuth() {
+  localStorage.removeItem("cgda_token");
+  localStorage.removeItem("cgda_username");
+  localStorage.removeItem("cgda_role");
+}
+
+async function request(path, { method = "GET", body, headers } = {}) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(headers || {})
+    },
+    body: body ? (body instanceof FormData ? body : JSON.stringify(body)) : undefined
+  });
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      // Token is missing/expired/invalid (e.g., backend restarted). Clear auth and force re-login.
+      clearAuth();
+      if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+      throw new Error("Session expired. Please sign in again.");
+    }
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) return res.json();
+  return res.text();
+}
+
+async function requestBlob(path, { method = "GET" } = {}) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+  if (!res.ok) {
+    if (res.status === 401) {
+      clearAuth();
+      if (!window.location.pathname.startsWith("/login")) window.location.href = "/login";
+      throw new Error("Session expired. Please sign in again.");
+    }
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.blob();
+}
+
+export const api = {
+  baseUrl: API_BASE_URL,
+  login: (username, password) => request("/api/auth/login", { method: "POST", body: { username, password } }),
+
+  // Dimensions for filter dropdowns (sourced from grievances_processed for date-range analytics)
+  dimensions: () => request("/api/analytics/dimensions_processed"),
+  retrospective: (params) => request(`/api/analytics/retrospective${toQuery(params)}`),
+  inferential: (params) => request(`/api/analytics/inferential${toQuery(params)}`),
+  feedback: (params) => request(`/api/analytics/feedback${toQuery(params)}`),
+  closure: (params) => request(`/api/analytics/closure${toQuery(params)}`),
+  predictive: (params) => request(`/api/analytics/predictive${toQuery(params)}`),
+  wordcloud: (params, topN = 60) => request(`/api/analytics/wordcloud${toQuery({ ...(params || {}), top_n: topN })}`),
+
+  // Date-range analytics (NO Gemini calls; reads grievances_processed)
+  executiveOverview: (params) => request(`/api/analytics/executive-overview${toQuery(params)}`),
+  topSubtopics: (params, topN = 10) => request(`/api/analytics/top-subtopics${toQuery({ ...(params || {}), top_n: topN })}`),
+  topSubtopicsByWard: (ward, params, topN = 5) =>
+    request(`/api/analytics/top-subtopics/by-ward${toQuery({ ...(params || {}), ward, top_n: topN })}`),
+  topSubtopicsByDepartment: (department, params, topN = 10) =>
+    request(`/api/analytics/top-subtopics/by-department${toQuery({ ...(params || {}), department, top_n: topN })}`),
+  subtopicTrend: (subtopic, params) => request(`/api/analytics/subtopic-trend${toQuery({ ...(params || {}), subtopic })}`),
+  oneOfAKind: (params, limit = 25) => request(`/api/analytics/one-of-a-kind${toQuery({ ...(params || {}), limit })}`),
+
+  // Predictive analytics (trend-based early warning; no Gemini except /explain)
+  predictiveRisingSubtopics: (params, { windowDays = 14, minVolume = 10, growthThreshold = 0.5, topN = 15 } = {}) =>
+    request(
+      `/api/analytics/predictive/rising-subtopics${toQuery({
+        ...(params || {}),
+        window_days: windowDays,
+        min_volume: minVolume,
+        growth_threshold: growthThreshold,
+        top_n: topN
+      })}`
+    ),
+  predictiveWardRisk: (params, { windowDays = 14, minWardVolume = 30 } = {}) =>
+    request(
+      `/api/analytics/predictive/ward-risk${toQuery({
+        ...(params || {}),
+        window_days: windowDays,
+        min_ward_volume: minWardVolume
+      })}`
+    ),
+  predictiveChronicIssues: (params, { period = "week", topNPerPeriod = 5, minPeriods = 4, limit = 20 } = {}) =>
+    request(
+      `/api/analytics/predictive/chronic-issues${toQuery({
+        ...(params || {}),
+        period,
+        top_n_per_period: topNPerPeriod,
+        min_periods: minPeriods,
+        limit
+      })}`
+    ),
+  predictiveExplain: (payload) => request("/api/analytics/predictive/explain", { method: "POST", body: payload }),
+
+  // Sub-topic intelligence (stored AI_SubTopic / GrievanceStructured.sub_issue)
+  subtopicsTop: (params, limit = 10) =>
+    request(`/api/analytics/subtopics/top${toQuery({ ...(params || {}), limit })}`),
+  subtopicsByWard: (ward, params, limit = 5) => {
+    const q = new URLSearchParams();
+    if (ward) q.set("ward", ward);
+    const base = toQuery(params || {});
+    const baseParams = base.startsWith("?") ? base.slice(1) : base;
+    if (baseParams) {
+      for (const [k, v] of new URLSearchParams(baseParams).entries()) q.set(k, v);
+    }
+    if (limit) q.set("limit", String(limit));
+    const s = q.toString();
+    return request(`/api/analytics/subtopics/by-ward${s ? `?${s}` : ""}`);
+  },
+  subtopicsByDepartment: (department, params, limit = 10) => {
+    const q = new URLSearchParams();
+    if (department) q.set("department", department);
+    const base = toQuery(params || {});
+    const baseParams = base.startsWith("?") ? base.slice(1) : base;
+    if (baseParams) {
+      for (const [k, v] of new URLSearchParams(baseParams).entries()) q.set(k, v);
+    }
+    if (limit) q.set("limit", String(limit));
+    const s = q.toString();
+    return request(`/api/analytics/subtopics/by-department${s ? `?${s}` : ""}`);
+  },
+  subtopicsTrend: (subtopic, params) => {
+    const q = new URLSearchParams();
+    if (subtopic) q.set("subtopic", subtopic);
+    const base = toQuery(params || {});
+    const baseParams = base.startsWith("?") ? base.slice(1) : base;
+    if (baseParams) {
+      for (const [k, v] of new URLSearchParams(baseParams).entries()) q.set(k, v);
+    }
+    const s = q.toString();
+    return request(`/api/analytics/subtopics/trend${s ? `?${s}` : ""}`);
+  },
+
+  uploadCsv: (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request(`/api/grievances/upload_csv`, {
+      method: "POST",
+      body: fd
+    });
+  },
+
+  processPending: (batchSize = 8, maxBatches = 2) =>
+    request(`/api/grievances/process_pending?batch_size=${encodeURIComponent(batchSize)}&max_batches=${encodeURIComponent(maxBatches)}`, {
+      method: "POST"
+    }),
+
+  exportStructuredCsv: () => request("/api/grievances/export_structured_csv"),
+  commissionerPdf: (params) => request(`/api/reports/commissioner_pdf${toQuery(params)}`)
+  ,
+
+  // NMMC/IES enrichment pipeline (drop file into data/raw)
+  dataLatest: () => request("/api/data/latest"),
+  dataIngest: (limitRows = 100) =>
+    request(`/api/data/ingest?limit_rows=${encodeURIComponent(limitRows)}`, { method: "POST" }),
+  dataRuns: () => request("/api/data/runs"),
+  dataRun: (runId) => request(`/api/data/runs/${encodeURIComponent(runId)}`),
+  downloadEnrichedCsv: () => requestBlob("/api/data/enriched/download"),
+  downloadPreprocessedCsv: () => requestBlob("/api/data/preprocessed/download"),
+  preprocessLatest: (rawFilename = null) =>
+    request(`/api/data/preprocess${rawFilename ? `?raw_filename=${encodeURIComponent(rawFilename)}` : ""}`, { method: "POST" }),
+  preprocessStatus: () => request("/api/data/preprocess/status"),
+  dataResults: (limit = 50, offset = 0) =>
+    request(`/api/data/results?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`)
+};
+
+function toQuery(params) {
+  if (!params) return "";
+  const q = new URLSearchParams();
+  if (params.start_date) q.set("start_date", params.start_date);
+  if (params.end_date) q.set("end_date", params.end_date);
+  if (params.wards && params.wards.length) q.set("wards", params.wards.join(","));
+  if (params.department) q.set("department", params.department);
+  if (params.category) q.set("category", params.category);
+  if (params.ai_category) q.set("ai_category", params.ai_category);
+  if (params.top_n) q.set("top_n", params.top_n);
+  if (params.limit) q.set("limit", params.limit);
+  if (params.ward) q.set("ward", params.ward);
+  if (params.subtopic) q.set("subtopic", params.subtopic);
+  if (params.window_days != null) q.set("window_days", params.window_days);
+  if (params.min_volume != null) q.set("min_volume", params.min_volume);
+  if (params.growth_threshold != null) q.set("growth_threshold", params.growth_threshold);
+  if (params.min_ward_volume != null) q.set("min_ward_volume", params.min_ward_volume);
+  if (params.period) q.set("period", params.period);
+  if (params.top_n_per_period != null) q.set("top_n_per_period", params.top_n_per_period);
+  if (params.min_periods != null) q.set("min_periods", params.min_periods);
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+
