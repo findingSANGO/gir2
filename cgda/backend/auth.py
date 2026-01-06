@@ -31,6 +31,10 @@ _USERS: dict[str, dict] = {
         "password_hash": pwd_context.hash(settings.admin_password),
         "role": "admin",
     },
+    settings.it_head_username: {
+        "password_hash": pwd_context.hash(settings.it_head_password),
+        "role": "it_head",
+    },
 }
 
 

@@ -11,8 +11,13 @@ services:
       # Persist DB + data under mounted /app/data
       DATABASE_URL: sqlite:////app/data/processed/cgda.db
       DATA_RAW_DIR: /app/data/raw
+      DATA_RAW2_DIR: /app/data/raw2
       DATA_PROCESSED_DIR: /app/data/processed
       DATA_RUNS_DIR: /app/data/runs
+      DATA_OUTPUTS_DIR: /app/data/outputs
+      DATA_PREPROCESS_DIR: /app/data/preprocess
+      DATA_STAGE_DIR: /app/data/stage_data
+      DATA_AI_OUTPUTS_DIR: /app/data/ai_outputs
       SAMPLE_CSV_PATH: /app/data/raw/sample_grievances.csv
       # For real NMMC files dropped into data/raw, keep seeding off to avoid mixing demo data.
       SEED_SAMPLE_DATA: "false"
@@ -22,6 +27,8 @@ services:
       # Free-tier Gemini config is sourced from ../.env (only manual step is pasting GEMINI_API_KEY there)
     volumes:
       - ../data:/app/data
+      # Also mount the env file so python-dotenv inside the container can read it
+      - ../.env:/app/.env:ro
 
   frontend:
     build:

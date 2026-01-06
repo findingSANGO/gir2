@@ -95,6 +95,7 @@ export const api = {
 
   // Dimensions for filter dropdowns (sourced from grievances_processed for date-range analytics)
   dimensions: () => request("/api/analytics/dimensions_processed"),
+  datasetsProcessed: () => request("/api/analytics/datasets_processed"),
   retrospective: (params) => request(`/api/analytics/retrospective${toQuery(params)}`),
   inferential: (params) => request(`/api/analytics/inferential${toQuery(params)}`),
   feedback: (params) => request(`/api/analytics/feedback${toQuery(params)}`),
@@ -104,6 +105,9 @@ export const api = {
 
   // Date-range analytics (NO Gemini calls; reads grievances_processed)
   executiveOverview: (params) => request(`/api/analytics/executive-overview${toQuery(params)}`),
+  executiveOverviewV2: (params) => request(`/api/executive_overview${toQuery(params)}`),
+  issueIntelligenceV2: (params) => request(`/api/issue_intelligence${toQuery(params)}`),
+  pipelineStatus: (params) => request(`/api/debug/pipeline_status${toQuery(params)}`),
   topSubtopics: (params, topN = 10) => request(`/api/analytics/top-subtopics${toQuery({ ...(params || {}), top_n: topN })}`),
   topSubtopicsByWard: (ward, params, topN = 5) =>
     request(`/api/analytics/top-subtopics/by-ward${toQuery({ ...(params || {}), ward, top_n: topN })}`),
@@ -201,9 +205,33 @@ export const api = {
   ,
 
   // NMMC/IES enrichment pipeline (drop file into data/raw)
-  dataLatest: () => request("/api/data/latest"),
-  dataIngest: (limitRows = 100) =>
-    request(`/api/data/ingest?limit_rows=${encodeURIComponent(limitRows)}`, { method: "POST" }),
+  dataLatest: (rawDir = null) => request(`/api/data/latest${rawDir ? `?raw_dir=${encodeURIComponent(rawDir)}` : ""}`),
+  dataFiles: (rawDir = null) => request(`/api/data/files${rawDir ? `?raw_dir=${encodeURIComponent(rawDir)}` : ""}`),
+  dataPreprocess: ({ rawFilename = null, rawDir = null, limitRows = null } = {}) =>
+    request(
+      `/api/data/preprocess${toQuery({
+        raw_filename: rawFilename || undefined,
+        raw_dir: rawDir || undefined,
+        limit_rows: limitRows == null ? undefined : limitRows
+      })}`,
+      { method: "POST" }
+    ),
+  dataEnrichTickets: ({ source, limitRows = null, forceReprocess = false } = {}) =>
+    request(
+      `/api/data/enrich_tickets${toQuery({
+        source,
+        limit_rows: limitRows == null ? undefined : limitRows,
+        force_reprocess: forceReprocess ? "true" : "false"
+      })}`,
+      { method: "POST" }
+    ),
+  dataIngest: (limitRows = 100, { extraFeatures = false, rawFilename = null, rawDir = null, resetAnalytics = false } = {}) =>
+    request(
+      `/api/data/ingest?limit_rows=${encodeURIComponent(limitRows)}&extra_features=${encodeURIComponent(extraFeatures)}${
+        rawFilename ? `&raw_filename=${encodeURIComponent(rawFilename)}` : ""
+      }${rawDir ? `&raw_dir=${encodeURIComponent(rawDir)}` : ""}&reset_analytics=${encodeURIComponent(resetAnalytics)}`,
+      { method: "POST" }
+    ),
   dataRuns: () => request("/api/data/runs"),
   dataRun: (runId) => request(`/api/data/runs/${encodeURIComponent(runId)}`),
   downloadEnrichedCsv: () => requestBlob("/api/data/enriched/download"),
@@ -211,8 +239,36 @@ export const api = {
   preprocessLatest: (rawFilename = null) =>
     request(`/api/data/preprocess${rawFilename ? `?raw_filename=${encodeURIComponent(rawFilename)}` : ""}`, { method: "POST" }),
   preprocessStatus: () => request("/api/data/preprocess/status"),
-  dataResults: (limit = 50, offset = 0) =>
-    request(`/api/data/results?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`)
+  buildAiOutputDataset: ({ baseSource, sampleSize = 100, outputSource = "ai_output_dataset", forceReprocess = true } = {}) =>
+    request(
+      `/api/data/build_ai_output_dataset${toQuery({
+        base_source: baseSource,
+        sample_size: sampleSize,
+        output_source: outputSource,
+        force_reprocess: forceReprocess ? "true" : "false"
+      })}`,
+      { method: "POST" }
+    ),
+  dataResults: (limit = 50, offset = 0, { source = null } = {}) =>
+    request(
+      `/api/data/results?limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}${
+        source ? `&source=${encodeURIComponent(source)}` : ""
+      }`
+    ),
+  // Manual evidence reports (no GenAI)
+  reportsUpload: async ({ file, periodType, periodStart, periodEnd, notes }) => {
+    const body = new FormData();
+    body.append("file", file);
+    body.append("period_type", periodType);
+    body.append("period_start", periodStart);
+    body.append("period_end", periodEnd);
+    if (notes) body.append("notes", notes);
+    return request("/api/reports/upload", { method: "POST", body });
+  },
+  reportsLatest: (periodType = "weekly") => request(`/api/reports/latest?period_type=${encodeURIComponent(periodType)}`),
+  reportsList: (periodType = "monthly", limit = 30) =>
+    request(`/api/reports?period_type=${encodeURIComponent(periodType)}&limit=${encodeURIComponent(limit)}`),
+  reportsDownloadUrl: (id) => `${API_BASE_URL}/api/reports/download/${encodeURIComponent(id)}`
 };
 
 function toQuery(params) {
@@ -220,10 +276,17 @@ function toQuery(params) {
   const q = new URLSearchParams();
   if (params.start_date) q.set("start_date", params.start_date);
   if (params.end_date) q.set("end_date", params.end_date);
+  if (params.source) q.set("source", params.source);
   if (params.wards && params.wards.length) q.set("wards", params.wards.join(","));
   if (params.department) q.set("department", params.department);
   if (params.category) q.set("category", params.category);
   if (params.ai_category) q.set("ai_category", params.ai_category);
+  if (params.ward_focus) q.set("ward_focus", params.ward_focus);
+  if (params.department_focus) q.set("department_focus", params.department_focus);
+  if (params.subtopic_focus) q.set("subtopic_focus", params.subtopic_focus);
+  if (params.unique_min_priority != null) q.set("unique_min_priority", String(params.unique_min_priority));
+  if (params.unique_confidence_high_only != null)
+    q.set("unique_confidence_high_only", String(params.unique_confidence_high_only));
   if (params.top_n) q.set("top_n", params.top_n);
   if (params.limit) q.set("limit", params.limit);
   if (params.ward) q.set("ward", params.ward);

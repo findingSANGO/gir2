@@ -26,7 +26,9 @@ export default {
           600: "#46526a",
           700: "#384357",
           800: "#2a3242",
-          900: "#1f2633"
+          900: "#1f2633",
+          // Needed for dark gradients/headers (used by Issue Intelligence 2 slides)
+          950: "#0b1220"
         }
       },
       boxShadow: {

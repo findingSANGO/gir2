@@ -20,6 +20,8 @@ export default function Login() {
       localStorage.setItem("cgda_token", res.access_token);
       localStorage.setItem("cgda_username", res.username);
       localStorage.setItem("cgda_role", res.role);
+      // Default system auto-loads the recommended dataset on first load.
+      localStorage.removeItem("cgda_dataset_loaded");
       nav(loc.state?.from || "/", { replace: true });
     } catch (err) {
       setError("Login failed. Please check username/password.");

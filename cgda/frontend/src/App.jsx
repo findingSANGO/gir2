@@ -1,4 +1,4 @@
-import React, { createContext, useMemo, useState } from "react";
+import React, { createContext, useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import Navbar from "./components/Navbar.jsx";
@@ -8,12 +8,14 @@ import { api } from "./services/api.js";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import IssueIntelligence from "./pages/IssueIntelligence.jsx";
+import IssueIntelligence2 from "./pages/IssueIntelligence2.jsx";
 import FeedbackAnalytics from "./pages/FeedbackAnalytics.jsx";
 import ClosureAnalytics from "./pages/ClosureAnalytics.jsx";
 import PredictiveView from "./pages/PredictiveView.jsx";
 import PredictiveAnalytics from "./pages/PredictiveAnalytics.jsx";
 import Evidence from "./pages/Evidence.jsx";
 import UploadEnrich from "./pages/UploadEnrich.jsx";
+import Datasets from "./pages/Datasets.jsx";
 
 function getAuth() {
   const token = localStorage.getItem("cgda_token");
@@ -26,6 +28,8 @@ function clearAuth() {
   localStorage.removeItem("cgda_token");
   localStorage.removeItem("cgda_username");
   localStorage.removeItem("cgda_role");
+  localStorage.removeItem("cgda_dataset_loaded");
+  localStorage.removeItem("cgda_dataset_source");
 }
 
 function Protected({ children }) {
@@ -37,11 +41,58 @@ function Protected({ children }) {
 
 export const FiltersContext = createContext({ filters: {}, setFilters: () => {} });
 
-function Shell({ title, children, onUpload }) {
+function pickOldDataset(datasets) {
+  if (!Array.isArray(datasets) || !datasets.length) return null;
+  // Old = strongest AI coverage (Gemini-enriched)
+  const sorted = [...datasets].sort((a, b) => {
+    const aa = a.ai_subtopic_rows || 0;
+    const ba = b.ai_subtopic_rows || 0;
+    if (ba !== aa) return ba - aa;
+    return (b.count || 0) - (a.count || 0);
+  });
+  return sorted[0]?.source || null;
+}
+
+function pickNewDataset(datasets) {
+  if (!Array.isArray(datasets) || !datasets.length) return null;
+  const isIdUnique = (s) => String(s || "").endsWith("__id_unique");
+  // Prefer FULL dataset once AI coverage exists (post-enrichment).
+  // If enrichment is still in-progress, fall back to the largest __run1_ sample.
+  const isRun1 = (s) => String(s || "").includes("__run1_");
+
+  const fullAiReady = [...datasets]
+    .filter((d) => !isRun1(d.source) && (d.ai_subtopic_rows || 0) > 0)
+    .sort((a, b) => (b.count || 0) - (a.count || 0));
+  // If an id-level unique dataset exists, prefer it as “new” default.
+  const idUnique = fullAiReady.filter((d) => isIdUnique(d.source));
+  if (idUnique.length) return idUnique[0]?.source || null;
+  if (fullAiReady.length) return fullAiReady[0]?.source || null;
+
+  const run1 = [...datasets]
+    .filter((d) => isRun1(d.source))
+    .sort((a, b) => (b.count || 0) - (a.count || 0));
+  if (run1.length) return run1[0]?.source || null;
+
+  // Else: strongest "new columns" signal, then most recent coverage
+  const sorted = [...datasets].sort((a, b) => {
+    const an = a.new_signal_rows || 0;
+    const bn = b.new_signal_rows || 0;
+    if (bn !== an) return bn - an;
+    const ad = a.max_created_date || "";
+    const bd = b.max_created_date || "";
+    if (bd !== ad) return bd.localeCompare(ad);
+    return String(b.source || "").localeCompare(String(a.source || ""));
+  });
+  return sorted[0]?.source || null;
+}
+
+function Shell({ title, children, onUpload, mode = null }) {
   const user = useMemo(() => {
     const a = getAuth();
     return { username: a.username, role: a.role };
   }, []);
+
+  const location = useLocation();
 
   // Draft filters are edited in the UI; Applied filters are used for API calls (GO button).
   function daysAgo(n) {
@@ -56,6 +107,8 @@ function Shell({ title, children, onUpload }) {
   const defaultDraft = {
     start_date: daysAgo(29),
     end_date: today(),
+    // Fixed file-pipeline default: app runs on processed_data_500 without user selection.
+    source: "processed_data_500",
     wards: [],
     department: null,
     category: null,
@@ -64,6 +117,37 @@ function Shell({ title, children, onUpload }) {
 
   const [draftFilters, setDraftFilters] = useState(defaultDraft);
   const [filters, setFilters] = useState(defaultDraft); // applied
+  const gateOpen = false;
+  const gateLoading = false;
+  const gateDatasets = [];
+  const gateSelected = null;
+  const gateRecommended = null;
+
+  // /old vs /new modes: pick a default dataset source automatically (no user guessing).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!mode) return;
+      try {
+        const res = await api.datasetsProcessed();
+        const ds = res?.datasets || [];
+        const recommended =
+          mode === "old" ? (res?.recommended_old_source || null) : (res?.recommended_new_source || null);
+        const chosen = recommended || (mode === "old" ? pickOldDataset(ds) : pickNewDataset(ds));
+        if (!chosen) return;
+        if (cancelled) return;
+        setDraftFilters((s) => (s.source ? s : { ...s, source: chosen }));
+        setFilters((s) => (s.source ? s : { ...s, source: chosen }));
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  // No dataset gate in the file-pipeline mode: always run on processed_data_500.
 
   return (
     <div className="min-h-screen bg-slateink-50">
@@ -76,12 +160,13 @@ function Shell({ title, children, onUpload }) {
             clearAuth();
             window.location.href = "/login";
           }}
-          onUpload={onUpload}
+          onUpload={null}
         />
         <Filters
           filters={draftFilters}
           setFilters={setDraftFilters}
-          onApply={() => setFilters(draftFilters)}
+          onApply={(next) => setFilters(next || draftFilters)}
+          showDataset={false}
         />
         <main className="mx-auto max-w-7xl px-4 lg:px-6 py-6">
           <FiltersContext.Provider value={{ filters, draftFilters, setDraftFilters, applyFilters: () => setFilters(draftFilters) }}>
@@ -165,6 +250,130 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* OLD system: pinned to baseline dataset (largest). */}
+        <Route
+          path="/old"
+          element={
+            <Protected>
+              <Shell title="Executive Overview (Old)" onUpload={() => setUploadOpen(true)} mode="old">
+                <Dashboard />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/old/issue-intelligence"
+          element={
+            <Protected>
+              <Shell title="Issue Intelligence (Old)" onUpload={() => setUploadOpen(true)} mode="old">
+                <IssueIntelligence />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/old/issue-intelligence2"
+          element={
+            <Protected>
+              <Shell title="Issue Intelligence 2 (Old)" onUpload={() => setUploadOpen(true)} mode="old">
+                <IssueIntelligence2 />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/old/feedback-analytics"
+          element={
+            <Protected>
+              <Shell title="Citizen Feedback Analytics (Old)" onUpload={() => setUploadOpen(true)} mode="old">
+                <FeedbackAnalytics />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/old/closure-analytics"
+          element={
+            <Protected>
+              <Shell title="Closure Time Analytics (Old)" onUpload={() => setUploadOpen(true)} mode="old">
+                <ClosureAnalytics />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/old/predictive"
+          element={
+            <Protected>
+              <Shell title="Predictive Analytics (Old)" onUpload={() => setUploadOpen(true)} mode="old">
+                <PredictiveAnalytics />
+              </Shell>
+            </Protected>
+          }
+        />
+
+        {/* NEW system: defaults to latest dataset (by max date), user can switch dataset. */}
+        <Route
+          path="/new"
+          element={
+            <Protected>
+              <Shell title="Executive Overview (New)" onUpload={() => setUploadOpen(true)} mode="new">
+                <Dashboard />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/new/issue-intelligence"
+          element={
+            <Protected>
+              <Shell title="Issue Intelligence (New)" onUpload={() => setUploadOpen(true)} mode="new">
+                <IssueIntelligence />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/new/issue-intelligence2"
+          element={
+            <Protected>
+              <Shell title="Issue Intelligence 2 (New)" onUpload={() => setUploadOpen(true)} mode="new">
+                <IssueIntelligence2 />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/new/feedback-analytics"
+          element={
+            <Protected>
+              <Shell title="Citizen Feedback Analytics (New)" onUpload={() => setUploadOpen(true)} mode="new">
+                <FeedbackAnalytics />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/new/closure-analytics"
+          element={
+            <Protected>
+              <Shell title="Closure Time Analytics (New)" onUpload={() => setUploadOpen(true)} mode="new">
+                <ClosureAnalytics />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/new/predictive"
+          element={
+            <Protected>
+              <Shell title="Predictive Analytics (New)" onUpload={() => setUploadOpen(true)} mode="new">
+                <PredictiveAnalytics />
+              </Shell>
+            </Protected>
+          }
+        />
+
         <Route
           path="/"
           element={
@@ -176,11 +385,31 @@ export default function App() {
           }
         />
         <Route
+          path="/datasets"
+          element={
+            <Protected>
+              <Shell title="Datasets" onUpload={() => setUploadOpen(true)}>
+                <Datasets />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
           path="/issue-intelligence"
           element={
             <Protected>
               <Shell title="Issue Intelligence" onUpload={() => setUploadOpen(true)}>
                 <IssueIntelligence />
+              </Shell>
+            </Protected>
+          }
+        />
+        <Route
+          path="/issue-intelligence2"
+          element={
+            <Protected>
+              <Shell title="Issue Intelligence 2" onUpload={() => setUploadOpen(true)}>
+                <IssueIntelligence2 />
               </Shell>
             </Protected>
           }

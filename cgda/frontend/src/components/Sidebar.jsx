@@ -1,18 +1,20 @@
 import { NavLink } from "react-router-dom";
-import { Activity, BarChart3, Brain, Clock, FileText, LayoutDashboard, Shield, Star } from "lucide-react";
+import { Activity, BarChart3, Brain, Clock, Database, FileText, LayoutDashboard, Shield, Star } from "lucide-react";
 import clsx from "clsx";
 
 const items = [
   { to: "/", label: "Executive Overview", icon: LayoutDashboard },
+  { to: "/datasets", label: "Datasets", icon: Database },
   { to: "/issue-intelligence", label: "Issue Intelligence", icon: BarChart3 },
+  { to: "/issue-intelligence2", label: "Issue Intelligence 2", icon: BarChart3 },
   { to: "/feedback-analytics", label: "Citizen Feedback", icon: Star },
   { to: "/closure-analytics", label: "Closure Analytics", icon: Clock },
   { to: "/predictive-analytics", label: "Predictive Analytics", icon: Brain },
-  { to: "/upload-enrich", label: "Upload & Enrich", icon: Activity },
-  { to: "/evidence", label: "Evidence", icon: FileText }
+  { to: "/evidence", label: "Evidence", icon: FileText, roles: ["commissioner", "it_head"] }
 ];
 
 export default function Sidebar() {
+  const role = localStorage.getItem("cgda_role") || "";
   return (
     <aside className="hidden lg:flex lg:w-72 lg:flex-col lg:fixed lg:inset-y-0">
       <div className="flex flex-col gap-4 h-full bg-slateink-900 text-slateink-50 px-4 py-5">
@@ -29,7 +31,9 @@ export default function Sidebar() {
         <nav className="mt-2 flex-1">
           <div className="text-xs uppercase tracking-wide text-slateink-400 px-2 mb-2">Dashboards</div>
           <div className="flex flex-col gap-1">
-            {items.map((it) => {
+            {items
+              .filter((it) => !it.roles || it.roles.includes(role))
+              .map((it) => {
               const Icon = it.icon;
               return (
                 <NavLink

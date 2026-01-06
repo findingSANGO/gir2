@@ -18,7 +18,14 @@ def _svc() -> AnalyticsService:
     return AnalyticsService()
 
 
-def _parse_filters(start_date: str | None, end_date: str | None, wards: str | None, department: str | None, category: str | None):
+def _parse_filters(
+    start_date: str | None,
+    end_date: str | None,
+    wards: str | None,
+    department: str | None,
+    category: str | None,
+    source: str | None,
+):
     import datetime as dt
     from services.analytics_service import Filters
 
@@ -34,6 +41,7 @@ def _parse_filters(start_date: str | None, end_date: str | None, wards: str | No
         wards=ward_list,
         department=department or None,
         category=category or None,
+        source=source or None,
     )
 
 
@@ -53,6 +61,14 @@ def dimensions_processed(
     return _svc().processed_dimensions(db)
 
 
+@router.get("/datasets_processed")
+def datasets_processed(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    db: Session = Depends(get_db),
+):
+    return _svc().processed_datasets(db)
+
+
 @router.get("/retrospective")
 def retrospective(
     _: Annotated[User, Depends(require_role("admin", "commissioner"))],
@@ -62,8 +78,9 @@ def retrospective(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().retrospective(db, f)
 
 
@@ -76,8 +93,9 @@ def inferential(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().inferential(db, f)
 
 
@@ -90,8 +108,9 @@ def predictive(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().predictive(db, f)
 
 
@@ -104,8 +123,9 @@ def feedback(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().feedback(db, f)
 
 
@@ -118,8 +138,9 @@ def closure(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().closure(db, f)
 
 
@@ -132,9 +153,10 @@ def wordcloud(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
     top_n: int = 60,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().wordcloud(db, f, top_n=top_n)
 
 
@@ -159,6 +181,7 @@ def executive_overview(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     top_n: int = 10,
 ):
     try:
@@ -169,7 +192,14 @@ def executive_overview(
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     ward_list = [w.strip() for w in (wards or "").split(",") if w.strip()] or None
     return _svc().executive_overview(
-        db, start_date=s, end_date=e, wards=ward_list, department=department or None, ai_category=ai_category or None, top_n=top_n
+        db,
+        start_date=s,
+        end_date=e,
+        wards=ward_list,
+        department=department or None,
+        ai_category=ai_category or None,
+        source=source or None,
+        top_n=top_n,
     )
 
 
@@ -182,6 +212,7 @@ def top_subtopics(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     top_n: int = 10,
 ):
     try:
@@ -192,7 +223,14 @@ def top_subtopics(
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     ward_list = [w.strip() for w in (wards or "").split(",") if w.strip()] or None
     return _svc().top_subtopics(
-        db, start_date=s, end_date=e, wards=ward_list, department=department or None, ai_category=ai_category or None, top_n=top_n
+        db,
+        start_date=s,
+        end_date=e,
+        wards=ward_list,
+        department=department or None,
+        ai_category=ai_category or None,
+        source=source or None,
+        top_n=top_n,
     )
 
 
@@ -205,6 +243,7 @@ def top_subtopics_by_ward(
     end_date: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     top_n: int = 5,
 ):
     try:
@@ -214,7 +253,14 @@ def top_subtopics_by_ward(
 
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     return _svc().top_subtopics_by_ward(
-        db, start_date=s, end_date=e, ward=ward, department=department or None, ai_category=ai_category or None, top_n=top_n
+        db,
+        start_date=s,
+        end_date=e,
+        ward=ward,
+        department=department or None,
+        ai_category=ai_category or None,
+        source=source or None,
+        top_n=top_n,
     )
 
 
@@ -227,6 +273,7 @@ def top_subtopics_by_department(
     end_date: str | None = None,
     wards: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     top_n: int = 10,
 ):
     try:
@@ -237,7 +284,14 @@ def top_subtopics_by_department(
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     ward_list = [w.strip() for w in (wards or "").split(",") if w.strip()] or None
     return _svc().top_subtopics_by_department(
-        db, start_date=s, end_date=e, department=department, wards=ward_list, ai_category=ai_category or None, top_n=top_n
+        db,
+        start_date=s,
+        end_date=e,
+        department=department,
+        wards=ward_list,
+        ai_category=ai_category or None,
+        source=source or None,
+        top_n=top_n,
     )
 
 
@@ -251,6 +305,7 @@ def subtopic_trend(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
 ):
     try:
         s, e = _parse_required_dates(start_date, end_date)
@@ -260,7 +315,14 @@ def subtopic_trend(
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     ward_list = [w.strip() for w in (wards or "").split(",") if w.strip()] or None
     return _svc().subtopic_trend(
-        db, start_date=s, end_date=e, subtopic=subtopic, wards=ward_list, department=department or None, ai_category=ai_category or None
+        db,
+        start_date=s,
+        end_date=e,
+        subtopic=subtopic,
+        wards=ward_list,
+        department=department or None,
+        ai_category=ai_category or None,
+        source=source or None,
     )
 
 
@@ -273,6 +335,7 @@ def one_of_a_kind(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     limit: int = 25,
 ):
     """
@@ -286,7 +349,14 @@ def one_of_a_kind(
         raise HTTPException(status_code=400, detail=str(ex)) from ex
     ward_list = [w.strip() for w in (wards or "").split(",") if w.strip()] or None
     return _svc().one_of_a_kind_complaints(
-        db, start_date=s, end_date=e, wards=ward_list, department=department or None, ai_category=ai_category or None, limit=limit
+        db,
+        start_date=s,
+        end_date=e,
+        wards=ward_list,
+        department=department or None,
+        ai_category=ai_category or None,
+        source=source or None,
+        limit=limit,
     )
 
 
@@ -304,6 +374,7 @@ def predictive_rising_subtopics(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     window_days: int = 14,
     min_volume: int = 10,
     growth_threshold: float = 0.5,
@@ -323,6 +394,7 @@ def predictive_rising_subtopics(
         wards=ward_list,
         department=department or None,
         ai_category=ai_category or None,
+        source=source or None,
         window_days=window_days,
         min_volume=min_volume,
         growth_threshold=growth_threshold,
@@ -339,6 +411,7 @@ def predictive_ward_risk(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     window_days: int = 14,
     min_ward_volume: int = 30,
 ):
@@ -356,6 +429,7 @@ def predictive_ward_risk(
         wards=ward_list,
         department=department or None,
         ai_category=ai_category or None,
+        source=source or None,
         window_days=window_days,
         min_ward_volume=min_ward_volume,
     )
@@ -370,6 +444,7 @@ def predictive_chronic_issues(
     wards: str | None = None,
     department: str | None = None,
     ai_category: str | None = None,
+    source: str | None = None,
     period: str = "week",
     top_n_per_period: int = 5,
     min_periods: int = 4,
@@ -389,6 +464,7 @@ def predictive_chronic_issues(
         wards=ward_list,
         department=department or None,
         ai_category=ai_category or None,
+        source=source or None,
         period=period,
         top_n_per_period=top_n_per_period,
         min_periods=min_periods,
@@ -414,9 +490,10 @@ def subtopics_top(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
     limit: int = 10,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().subtopics_top(db, f, limit=limit)
 
 
@@ -429,10 +506,11 @@ def subtopics_by_ward(
     end_date: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
     limit: int = 5,
 ):
     # ward selector is explicit for this endpoint; other filters still apply.
-    f = _parse_filters(start_date, end_date, None, department, category)
+    f = _parse_filters(start_date, end_date, None, department, category, source)
     return _svc().subtopics_by_ward(db, f, ward=ward, limit=limit)
 
 
@@ -445,10 +523,11 @@ def subtopics_by_department(
     end_date: str | None = None,
     wards: str | None = None,
     category: str | None = None,
+    source: str | None = None,
     limit: int = 10,
 ):
     # department selector is explicit for this endpoint; other filters still apply.
-    f = _parse_filters(start_date, end_date, wards, None, category)
+    f = _parse_filters(start_date, end_date, wards, None, category, source)
     return _svc().subtopics_by_department(db, f, department=department, limit=limit)
 
 
@@ -462,8 +541,9 @@ def subtopics_trend(
     wards: str | None = None,
     department: str | None = None,
     category: str | None = None,
+    source: str | None = None,
 ):
-    f = _parse_filters(start_date, end_date, wards, department, category)
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
     return _svc().subtopics_trend(db, f, subtopic=subtopic)
 
 
@@ -481,9 +561,9 @@ def commissioner_pdf(
     import datetime as dt
 
     svc = _svc()
-    retro = svc.retrospective(db, _parse_filters(None, None, None, None, None))
-    infer = svc.inferential(db, _parse_filters(None, None, None, None, None))
-    pred = svc.predictive(db, _parse_filters(None, None, None, None, None))
+    retro = svc.retrospective(db, _parse_filters(None, None, None, None, None, None))
+    infer = svc.inferential(db, _parse_filters(None, None, None, None, None, None))
+    pred = svc.predictive(db, _parse_filters(None, None, None, None, None, None))
     bundle = {"retrospective": retro, "inferential": infer, "predictive": pred}
     summary = AIService().commissioner_summary(bundle)
 

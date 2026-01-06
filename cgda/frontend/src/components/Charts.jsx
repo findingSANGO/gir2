@@ -19,6 +19,9 @@ import { colorForKey } from "../utils/chartColors.js";
 import { Card, CardContent, CardHeader } from "./ui/Card.jsx";
 import Skeleton from "./ui/Skeleton.jsx";
 
+const GRID_STROKE = "#eceef2";
+const AXIS_TICK = { fontSize: 11, fill: "#64748b" };
+
 function ChartShell({ title, subtitle, right, children, ai = false }) {
   return (
     <Card className={clsx(ai && "border-indigo-200/60 bg-indigo-50/30")}>
@@ -41,6 +44,7 @@ function ChartTooltip({ active, payload, label, valueFormatter, total }) {
   const row = payload[0] || {};
   const value = row.value;
   const pct = total ? (Number(value || 0) / Number(total)) * 100 : null;
+  const extra = row?.payload?.tooltip_lines;
   return (
     <div className="rounded-xl border border-slateink-200 bg-white/95 shadow-card px-3 py-2">
       {label != null ? <div className="text-xs font-semibold text-slateink-700">{label}</div> : null}
@@ -50,11 +54,33 @@ function ChartTooltip({ active, payload, label, valueFormatter, total }) {
           <span className="ml-2 text-xs font-semibold text-slateink-500">({pct.toFixed(1)}%)</span>
         ) : null}
       </div>
+      {Array.isArray(extra) && extra.length ? (
+        <div className="mt-2 space-y-1">
+          {extra.slice(0, 6).map((x, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-4 text-xs">
+              <div className="text-slateink-600">{x?.label}</div>
+              <div className="font-semibold text-slateink-900">{String(x?.value ?? "")}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function BarCard({ title, subtitle, right, data, xKey, bars, height = 260, ai = false }) {
+export function BarCard({
+  title,
+  subtitle,
+  right,
+  data,
+  xKey,
+  bars,
+  height = 260,
+  ai = false,
+  total,
+  showLegend = false,
+  xTickFormatter
+}) {
   return (
     <ChartShell title={title} subtitle={subtitle} right={right} ai={ai}>
       {!data ? (
@@ -68,19 +94,40 @@ export function BarCard({ title, subtitle, right, data, xKey, bars, height = 260
         <div style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="4 8" stroke="#eceef2" />
-              <XAxis dataKey={xKey} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<ChartTooltip total={null} />} />
-              <Legend />
+              {/* Calm executive style: subtle horizontal guides only */}
+              <CartesianGrid strokeDasharray="2 10" stroke={GRID_STROKE} vertical={false} />
+              <XAxis
+                dataKey={xKey}
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={12}
+                interval={data.length > 9 ? "preserveStartEnd" : 0}
+                tickFormatter={xTickFormatter}
+              />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
+              <Tooltip content={<ChartTooltip total={total ?? null} />} />
+              {showLegend ? (
+                <Legend
+                  wrapperStyle={{ fontSize: 12, color: "#64748b" }}
+                  iconType="circle"
+                  align="center"
+                  verticalAlign="bottom"
+                />
+              ) : null}
               {bars.map((b) => (
                 <Bar
                   key={b.key}
                   dataKey={b.key}
                   name={b.name || b.key}
-                  fill={b.color || "#2b54f6"}
-                  radius={[10, 10, 0, 0]}
-                />
+                  fill={b.color || "#2b54f6"} // gov-600
+                  radius={[10, 10, 4, 4]}
+                  maxBarSize={52}
+                >
+                  {b.colorByX
+                    ? (data || []).map((d) => <Cell key={String(d?.[xKey])} fill={colorForKey(d?.[xKey])} />)
+                    : null}
+                </Bar>
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -99,7 +146,8 @@ export function VerticalBarCard({
   valueKey,
   height = 320,
   ai = false,
-  total
+  total,
+  showLegend = false
 }) {
   // Expect [{[yKey]: string, [valueKey]: number}]
   return (
@@ -120,13 +168,13 @@ export function VerticalBarCard({
               margin={{ top: 6, right: 18, left: 8, bottom: 0 }}
               barCategoryGap={10}
             >
-              <CartesianGrid strokeDasharray="4 8" stroke="#eceef2" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="2 10" stroke={GRID_STROKE} horizontal={false} />
+              <XAxis type="number" tick={AXIS_TICK} axisLine={false} tickLine={false} />
               <YAxis
                 type="category"
                 dataKey={yKey}
                 width={180}
-                tick={{ fontSize: 12 }}
+                tick={AXIS_TICK}
                 axisLine={false}
                 tickLine={false}
               />
@@ -138,6 +186,9 @@ export function VerticalBarCard({
                   />
                 }
               />
+              {showLegend ? (
+                <Legend wrapperStyle={{ fontSize: 12, color: "#64748b" }} iconType="circle" />
+              ) : null}
               <Bar dataKey={valueKey} radius={[10, 10, 10, 10]}>
                 {(data || []).map((d) => (
                   <Cell key={String(d?.[yKey])} fill={colorForKey(d?.[yKey])} />
@@ -151,7 +202,7 @@ export function VerticalBarCard({
   );
 }
 
-export function LineCard({ title, subtitle, right, data, xKey, lines, height = 260, ai = false }) {
+export function LineCard({ title, subtitle, right, data, xKey, lines, height = 260, ai = false, showLegend = false }) {
   return (
     <ChartShell title={title} subtitle={subtitle} right={right} ai={ai}>
       {!data ? (
@@ -165,11 +216,11 @@ export function LineCard({ title, subtitle, right, data, xKey, lines, height = 2
         <div style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="4 8" stroke="#eceef2" />
-              <XAxis dataKey={xKey} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+              <CartesianGrid strokeDasharray="2 10" stroke={GRID_STROKE} vertical={false} />
+              <XAxis dataKey={xKey} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={14} />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
               <Tooltip content={<ChartTooltip total={null} />} />
-              <Legend />
+              {showLegend ? <Legend wrapperStyle={{ fontSize: 12, color: "#64748b" }} iconType="circle" /> : null}
               {lines.map((l) => (
                 <Line
                   key={l.key}

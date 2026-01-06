@@ -1,7 +1,5 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../services/api.js";
-import { FiltersContext } from "../App.jsx";
-import AIBadge from "../components/AIBadge.jsx";
 
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -15,107 +13,175 @@ function downloadBlob(blob, filename) {
 }
 
 export default function Evidence() {
-  const { filters } = useContext(FiltersContext);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [showAI, setShowAI] = useState(false);
+  const [latest, setLatest] = useState({ weekly: null, monthly: null, quarterly: null, annual: null });
+  const [file, setFile] = useState(null);
+  const [periodType, setPeriodType] = useState("weekly");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [notes, setNotes] = useState("");
+
+  async function refreshLatest() {
+    try {
+      const [w, m, q, a] = await Promise.all([
+        api.reportsLatest("weekly"),
+        api.reportsLatest("monthly"),
+        api.reportsLatest("quarterly"),
+        api.reportsLatest("annual")
+      ]);
+      setLatest({
+        weekly: w.latest,
+        monthly: m.latest,
+        quarterly: q.latest,
+        annual: a.latest
+      });
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await api.retrospective(filters);
-        if (!cancelled) setShowAI(r?.ai_meta?.ai_provider === "caseA");
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [filters]);
+    refreshLatest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function exportCsv() {
+  async function upload() {
+    if (!file) return;
     setBusy(true);
     setMsg("");
     try {
-      // api.exportStructuredCsv returns text; fetch as blob for clean download
-      const token = localStorage.getItem("cgda_token");
-      const res = await fetch(`${api.baseUrl}/api/data/export_structured_csv`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const blob = await res.blob();
-      downloadBlob(blob, "cgda_structured_export.csv");
-      setMsg("Structured CSV exported.");
+      if (!periodStart || !periodEnd) {
+        setMsg("Please set period start and end dates.");
+        return;
+      }
+      await api.reportsUpload({ file, periodType, periodStart, periodEnd, notes: notes || null });
+      setFile(null);
+      setNotes("");
+      setMsg("Report uploaded.");
+      await refreshLatest();
     } catch (e) {
-      setMsg(e.message || "Export failed");
+      setMsg(e.message || "Upload failed");
     } finally {
       setBusy(false);
     }
   }
 
-  async function commissionerPdf() {
-    setBusy(true);
-    setMsg("");
-    try {
-      const token = localStorage.getItem("cgda_token");
-      const qs = new URLSearchParams();
-      if (filters.start_date) qs.set("start_date", filters.start_date);
-      if (filters.end_date) qs.set("end_date", filters.end_date);
-      if (filters.wards?.length) qs.set("wards", filters.wards.join(","));
-      if (filters.department) qs.set("department", filters.department);
-      if (filters.category) qs.set("category", filters.category);
-      const url = `${api.baseUrl}/api/reports/commissioner_pdf${qs.toString() ? `?${qs}` : ""}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      const blob = await res.blob();
-      downloadBlob(blob, "cgda_commissioner_summary.pdf");
-      setMsg("Commissioner PDF generated.");
-    } catch (e) {
-      setMsg(e.message || "PDF generation failed");
-    } finally {
-      setBusy(false);
-    }
+  function Card({ title, row }) {
+    return (
+      <div className="rounded-xl bg-white shadow-card ring-1 ring-slateink-100 p-4">
+        <div className="text-sm font-semibold text-slateink-800">{title}</div>
+        <div className="mt-1 text-xs text-slateink-500">Manual upload (looks automated; no GenAI)</div>
+        {row ? (
+          <div className="mt-3 text-sm text-slateink-700">
+            <div>
+              <span className="font-semibold">Period:</span> {row.period_start} → {row.period_end}
+            </div>
+            <div className="text-xs text-slateink-500 mt-1">Uploaded: {row.uploaded_at}</div>
+            <button
+              disabled={busy}
+              onClick={async () => {
+                const token = localStorage.getItem("cgda_token");
+                const res = await fetch(api.reportsDownloadUrl(row.id), { headers: { Authorization: `Bearer ${token}` } });
+                const blob = await res.blob();
+                downloadBlob(blob, `${row.period_type}_${row.period_start}_${row.period_end}.pdf`);
+              }}
+              className="mt-3 rounded-lg bg-slateink-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slateink-800 disabled:opacity-50"
+            >
+              Download Latest
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 text-sm text-slateink-500">No report uploaded yet.</div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-white shadow-card ring-1 ring-slateink-100 p-4">
-        <div className="text-sm font-semibold text-slateink-800">Evidence & exports</div>
+        <div className="text-sm font-semibold text-slateink-800">Evidence (manual uploads)</div>
         <div className="mt-2 text-sm text-slateink-700">
-          Use this section during the Commissioner demo to export structured outputs and generate a PDF summary (with filter context).
+          Upload weekly/monthly/quarterly/annual PDF reports. This is purely manual right now, but presented like an automated evidence feed.
         </div>
-        <div className="mt-2 text-xs text-slateink-500 flex items-center gap-2">
-          {showAI ? <AIBadge /> : null}
-          <span>Badge appears wherever Gemini-derived (structured) analytics outputs are used.</span>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div>
+            <div className="text-xs font-semibold text-slateink-600">PDF file</div>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="mt-1 block w-full text-sm text-slateink-700 file:mr-3 file:rounded-lg file:border-0 file:bg-gov-600 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-gov-700"
+            />
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slateink-600">Period type</div>
+            <select
+              value={periodType}
+              onChange={(e) => setPeriodType(e.target.value)}
+              className="mt-1 h-10 w-full rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+            >
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option>
+            </select>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slateink-600">Period start</div>
+            <input
+              type="date"
+              value={periodStart}
+              onChange={(e) => setPeriodStart(e.target.value)}
+              className="mt-1 h-10 w-full rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+            />
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-slateink-600">Period end</div>
+            <input
+              type="date"
+              value={periodEnd}
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              className="mt-1 h-10 w-full rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <div className="text-xs font-semibold text-slateink-600">Notes (optional)</div>
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g., Uploaded by IT Head, scan from meeting minutes"
+              className="mt-1 h-10 w-full rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+            />
+          </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+
+        <div className="mt-4 flex items-center gap-2">
           <button
-            disabled={busy}
-            onClick={commissionerPdf}
+            disabled={busy || !file}
+            onClick={upload}
             className="rounded-lg bg-slateink-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slateink-800 disabled:opacity-50"
           >
-            Generate Commissioner PDF <span className="ml-2">{showAI ? <AIBadge /> : null}</span>
+            Upload Report
           </button>
           <button
             disabled={busy}
-            onClick={exportCsv}
+            onClick={refreshLatest}
             className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slateink-800 ring-1 ring-slateink-200 hover:ring-slateink-300 disabled:opacity-50"
           >
-            Export CSV (structured)
+            Refresh
           </button>
         </div>
         {msg ? <div className="mt-3 text-sm text-slateink-700">{msg}</div> : null}
       </div>
 
-      <div className="rounded-xl bg-white shadow-card ring-1 ring-slateink-100 p-4">
-        <div className="text-sm font-semibold text-slateink-800">Demo checklist (acceptance)</div>
-        <ul className="mt-3 space-y-2 text-sm text-slateink-700">
-          <li>• Upload CSV → processing job → structured data created</li>
-          <li>• All dashboards show non-empty charts</li>
-          <li>• Feedback analytics surfaces top low-feedback drivers + reasons</li>
-          <li>• Predictive view shows wards/categories at risk</li>
-          <li>• Commissioner PDF downloads successfully</li>
-        </ul>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card title="Weekly" row={latest.weekly} />
+        <Card title="Monthly" row={latest.monthly} />
+        <Card title="Quarterly" row={latest.quarterly} />
+        <Card title="Annual" row={latest.annual} />
       </div>
     </div>
   );

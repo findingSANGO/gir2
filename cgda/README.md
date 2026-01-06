@@ -24,7 +24,7 @@ CGDA is a **read-only analytics portal** for a Municipal Corporation. It **does 
 
 1) Copy environment file:
 
-- Create a `.env` file at the repo root (`cgda/.env`) based on `.env.example`.
+- Create a `.env` file at the repo root (`cgda/.env`) based on `env.example`.
 - **Optional**: set `GEMINI_API_KEY` for Gemini-powered analysis. If empty, the backend will use an explainable heuristic fallback.
 
 2) Start:
@@ -48,10 +48,35 @@ docker compose -f deployment/docker-compose.yml build --no-cache
 docker compose -f deployment/docker-compose.yml up -d
 ```
 
+## Hard reset (delete ALL derived data and start from scratch)
+
+This wipes **SQLite DB + processed exports + run artifacts + logs**, but **keeps raw inputs** under `data/raw/` and `data/raw2/`.
+
+```bash
+cd cgda
+chmod +x hard_reset.sh
+./hard_reset.sh
+```
+
 Then verify:
 
 ```bash
 curl http://localhost:8000/healthz
+
+## Gemini API key (changed?) — how to provide it
+
+The backend reads Gemini configuration from environment variables.
+
+- **Recommended (local dev)**: create a local `cgda/.env` file (do not commit it) with:
+
+  - `GEMINI_API_KEY=...`
+  - optional: `GEMINI_MODEL_PRIMARY`, `GEMINI_MODEL_FALLBACK`
+
+Then restart the backend. The backend loads `cgda/.env` on startup.
+
+- **Alternative (one terminal session)**:
+
+  - `export GEMINI_API_KEY="..."` then start the backend in the same terminal.
 ```
 
 ## Temporary public demo URL (Cloudflare Tunnel Quick Tunnel)

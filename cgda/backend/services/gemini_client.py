@@ -61,7 +61,7 @@ class GeminiClient:
         temperature: float | None = None,
         max_output_tokens: int | None = None,
         expect: Literal["dict", "list", "any"] = "any",
-        timeout_s: int = 40,
+        timeout_s: int | None = None,
     ) -> GeminiResult:
         if not settings.gemini_api_key:
             return GeminiResult(
@@ -77,16 +77,18 @@ class GeminiClient:
 
         temp = float(settings.gemini_temperature if temperature is None else temperature)
         mot = int(settings.gemini_max_output_tokens if max_output_tokens is None else max_output_tokens)
+        to_s = int(settings.gemini_timeout_s if timeout_s is None else timeout_s)
+        attempts_per_model = max(1, int(getattr(settings, "gemini_attempts_per_model", 2)))
 
         last_error_msg: str | None = None
         usage_acc = {"prompt_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
         for model in (settings.gemini_model_primary, settings.gemini_model_fallback):
             last_err: Exception | None = None
-            for attempt in range(3):  # max 2 retries per model (3 total attempts)
+            for attempt in range(attempts_per_model):
                 try:
                     text, usage = self._call_text(
-                        model=model, prompt=prompt, temperature=temp, max_output_tokens=mot, timeout_s=timeout_s
+                        model=model, prompt=prompt, temperature=temp, max_output_tokens=mot, timeout_s=to_s
                     )
                     # Always account tokens for cost analytics, even if JSON parsing fails and we retry.
                     for k in ("prompt_tokens", "output_tokens", "total_tokens"):
@@ -109,18 +111,18 @@ class GeminiClient:
                     )
                 except GeminiError as e:
                     last_err = e
-                    if attempt < 2:
+                    if attempt < (attempts_per_model - 1):
                         time.sleep(1.0 * (2**attempt))
                     continue
                 except (requests.Timeout, requests.ConnectionError) as e:
                     last_err = e
-                    if attempt < 2:
+                    if attempt < (attempts_per_model - 1):
                         time.sleep(1.0 * (2**attempt))
                     continue
                 except Exception as e:
                     # Non-classified failure: still retry once, then move to fallback.
                     last_err = e
-                    if attempt < 2:
+                    if attempt < (attempts_per_model - 1):
                         time.sleep(1.0 * (2**attempt))
                     continue
 
