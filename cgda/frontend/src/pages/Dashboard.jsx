@@ -1,6 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { CheckCircle2, ClipboardCheck, LineChart as LineChartIcon, MessageSquareText, Timer } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import StatCard from "../components/StatCard.jsx";
 import { LineCard, VerticalBarCard } from "../components/Charts.jsx";
 import { api } from "../services/api.js";
@@ -47,27 +46,11 @@ function formatLastUpdated(isoZ) {
   return d.toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-function marks(score, max) {
-  return `${Math.max(0, Math.min(max, score))}/${max} Marks`;
-}
-
 export default function Dashboard() {
   const { filters } = useContext(FiltersContext);
-  const { search } = useLocation();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [mode, setMode] = useState("volume"); // volume | priority
-  const [pipe, setPipe] = useState(null);
-  const [pipeErr, setPipeErr] = useState("");
-
-  const debugOn = useMemo(() => {
-    try {
-      const q = new URLSearchParams(search || "");
-      return q.get("debug") === "1";
-    } catch {
-      return false;
-    }
-  }, [search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,29 +67,6 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [filters]);
-
-  useEffect(() => {
-    if (!debugOn) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setPipeErr("");
-        const p = await api.pipelineStatus({
-          source: filters?.source,
-          start_date: filters?.start_date,
-          end_date: filters?.end_date
-        });
-        if (cancelled) return;
-        setPipe(p);
-      } catch (e) {
-        if (cancelled) return;
-        setPipeErr(e.message || "Failed to load pipeline status");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [debugOn, filters?.source, filters?.start_date, filters?.end_date]);
 
   if (error) {
     return <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{error}</div>;
@@ -189,101 +149,26 @@ export default function Dashboard() {
   const aiTotal = data?.analytics?.ai_coverage_total ?? 0;
   const aiPct = aiTotal ? Math.round((aiKnown / aiTotal) * 100) : 0;
 
-  // Simple deterministic scoring (mockup-style) — audit-friendly
-  const closureMarks =
-    avgClosure === "—"
-      ? 0
-      : data?.totals?.avg_closure_time_days <= 10
-        ? 4
-        : data?.totals?.avg_closure_time_days <= 14
-          ? 3
-          : data?.totals?.avg_closure_time_days <= 21
-            ? 2
-            : 1;
-  const escalationMarks = escalationRate <= 10 ? 3 : escalationRate <= 15 ? 2 : escalationRate <= 25 ? 1 : 0;
-  const feedbackMarks =
-    data?.totals?.avg_rating == null ? 0 : data?.totals?.avg_rating >= 3.5 ? 4 : data?.totals?.avg_rating >= 3.0 ? 3 : data?.totals?.avg_rating >= 2.5 ? 2 : 1;
-  const analyticsMarks = aiPct >= 90 ? 3 : aiPct >= 75 ? 2 : aiPct >= 50 ? 1 : 0;
-  const totalMarks = closureMarks + escalationMarks + feedbackMarks + analyticsMarks;
-  const totalMax = 14;
+  function fmtInt(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return String(Math.round(n));
+  }
+  function fmt1(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return n.toFixed(1);
+  }
 
   return (
     <div className="space-y-5">
-      {debugOn ? (
-        <div className="rounded-2xl bg-white ring-1 ring-slateink-100 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slateink-900">Data Pipeline Debug (temporary)</div>
-              <div className="mt-1 text-xs text-slateink-500">
-                Shows raw → preprocessed → staged → AI-enriched → dashboard-eligible counts for the currently applied filters.
-              </div>
-            </div>
-            <div className="text-xs font-semibold text-slateink-600">debug=1</div>
-          </div>
-          {pipeErr ? (
-            <div className="mt-3 text-sm text-rose-700">{pipeErr}</div>
-          ) : pipe ? (
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
-                <div className="text-xs font-semibold text-slateink-600">RAW (data/raw2)</div>
-                <div className="mt-1 text-sm text-slateink-900">{pipe?.raw2?.latest_file || "—"}</div>
-                <div className="mt-1 text-xs text-slateink-600">
-                  rows: <span className="font-semibold">{pipe?.raw2?.raw_rows ?? "—"}</span> • unique ids:{" "}
-                  <span className="font-semibold">{pipe?.raw2?.raw_unique_ids ?? "—"}</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
-                <div className="text-xs font-semibold text-slateink-600">PREPROCESSED (DB)</div>
-                <div className="mt-1 text-sm text-slateink-900">{pipe?.db?.preprocessed_source || "—"}</div>
-                <div className="mt-1 text-xs text-slateink-600">
-                  rows: <span className="font-semibold">{pipe?.db?.preprocessed_rows ?? "—"}</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
-                <div className="text-xs font-semibold text-slateink-600">STAGED (DB)</div>
-                <div className="mt-1 text-sm text-slateink-900">{pipe?.db?.staged_source || "—"}</div>
-                <div className="mt-1 text-xs text-slateink-600">
-                  rows: <span className="font-semibold">{pipe?.db?.staged_rows ?? "—"}</span> • created_date ok:{" "}
-                  <span className="font-semibold">{pipe?.db?.staged_created_date_nonnull ?? "—"}</span>
-                </div>
-                <div className="mt-1 text-[11px] text-slateink-500">
-                  created_date: {pipe?.db?.staged_created_date_min || "—"} → {pipe?.db?.staged_created_date_max || "—"}
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
-                <div className="text-xs font-semibold text-slateink-600">AI OUTPUTS (on staged rows)</div>
-                <div className="mt-1 text-xs text-slateink-600">
-                  ai_subtopic filled: <span className="font-semibold">{pipe?.db?.staged_ai_subtopic_filled ?? "—"}</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
-                <div className="text-xs font-semibold text-slateink-600">DASHBOARD ELIGIBLE (date filter)</div>
-                <div className="mt-1 text-xs text-slateink-600">
-                  filter: <span className="font-semibold">{pipe?.db?.filter_start_date || "—"}</span> →{" "}
-                  <span className="font-semibold">{pipe?.db?.filter_end_date || "—"}</span>
-                </div>
-                <div className="mt-1 text-xs text-slateink-600">
-                  eligible rows: <span className="font-semibold">{pipe?.db?.eligible_rows_for_filter ?? "—"}</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-3 text-sm text-slateink-600">Loading pipeline status…</div>
-          )}
-        </div>
-      ) : null}
-
       {/* Mockup-style header */}
       <div className="rounded-2xl bg-white ring-1 ring-slateink-100 p-4 lg:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-2xl font-semibold text-slateink-900">Grievance Management Executive Overview</div>
+            <div className="text-2xl font-semibold text-slateink-900">Executive Overview</div>
             <div className="mt-1 text-sm text-slateink-500">
-              Reporting Period (N={reportingN}) <span className="mx-2">•</span> {reportingRange}
+              Reporting period <span className="mx-2">•</span> N={reportingN} <span className="mx-2">•</span> {reportingRange}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -296,141 +181,24 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Performance Scorecard */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-2xl bg-gov-50 ring-1 ring-gov-100 flex items-center justify-center">
-            <ClipboardCheck className="h-6 w-6 text-gov-700" />
-          </div>
-          <div className="text-xl font-semibold text-slateink-900">Performance Scorecard</div>
-        </div>
-        <div className="rounded-full bg-white ring-1 ring-slateink-200 px-4 py-2 text-sm font-semibold text-slateink-900">
-          Total Score: <span className="ml-1">{totalMarks}/{totalMax}</span>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Closure Time */}
-        <Card className="rounded-2xl">
-          <CardContent>
-            <div className="flex items-start justify-between gap-3 pt-5">
-              <div>
-                <div className="text-sm font-semibold tracking-wide text-slateink-700">CLOSURE TIME</div>
-                <div className="mt-4 flex items-baseline gap-2">
-                  <div className="text-5xl font-semibold text-slateink-900">
-                    {data?.totals?.avg_closure_time_days != null ? data.totals.avg_closure_time_days : "—"}
-                  </div>
-                  <div className="text-lg text-slateink-700">days avg</div>
-                </div>
-                <div className="mt-2 text-sm text-slateink-600">
-                  (N={closureCoverage?.known ?? 0} with close_date)
-                </div>
-              </div>
-              <div className="rounded-full bg-gov-50 text-gov-800 ring-1 ring-gov-100 px-3 py-1 text-sm font-semibold">
-                {marks(closureMarks, 4)}
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-2xl bg-white ring-1 ring-slateink-100 px-4 py-4 flex items-center justify-between">
-              <div className="text-sm font-semibold text-slateink-800">Median: {closureMedian != null ? `${closureMedian}d` : "—"}</div>
-              <div className="text-slateink-300">|</div>
-              <div className="text-sm font-semibold text-slateink-800">P90: {closureP90 != null ? `${closureP90}d` : "—"}</div>
-            </div>
-
-            <div className="mt-4 rounded-xl bg-gov-50 ring-1 ring-gov-100 px-4 py-3 text-sm text-gov-800 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              <span>{closeCoveragePct != null ? `${closeCoveragePct}%` : "—"} close date coverage</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Escalation */}
-        <Card className="rounded-2xl">
-          <CardContent>
-            <div className="flex items-start justify-between gap-3 pt-5">
-              <div>
-                <div className="text-sm font-semibold tracking-wide text-slateink-700">ESCALATION</div>
-                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white ring-1 ring-slateink-200 px-3 py-1 text-sm font-semibold">
-                  <CheckCircle2 className="h-4 w-4 text-slateink-700" />
-                  Enabled (1/1)
-                </div>
-                <div className="mt-5 flex items-baseline gap-2">
-                  <div className="text-5xl font-semibold text-slateink-900">{escalationRate}</div>
-                  <div className="text-lg text-slateink-700">% rate</div>
-                </div>
-                <div className="mt-2 text-sm text-slateink-600">(N={escalatedCount} escalated)</div>
-              </div>
-              <div className="rounded-full bg-gov-50 text-gov-800 ring-1 ring-gov-100 px-3 py-1 text-sm font-semibold">
-                {marks(escalationMarks, 3)}
-              </div>
-            </div>
-            <div className="mt-6 rounded-xl bg-indigo-50/50 ring-1 ring-indigo-100 px-4 py-3 text-sm text-indigo-800 flex items-center gap-2">
-              <LineChartIcon className="h-4 w-4" />
-              <span>Quality control active</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Citizen Feedback */}
-        <Card className="rounded-2xl">
-          <CardContent>
-            <div className="flex items-start justify-between gap-3 pt-5">
-              <div>
-                <div className="text-sm font-semibold tracking-wide text-slateink-700">CITIZEN FEEDBACK</div>
-                <div className="mt-4 flex items-baseline gap-2">
-                  <div className="text-5xl font-semibold text-slateink-900">
-                    {data?.totals?.avg_rating != null ? data.totals.avg_rating : "—"}
-                  </div>
-                  <div className="text-lg text-slateink-700">/5 stars</div>
-                </div>
-                <div className="mt-2 text-sm text-slateink-600">(N={ratingCoverage?.known ?? 0} rated)</div>
-              </div>
-              <div className="rounded-full bg-gov-50 text-gov-800 ring-1 ring-gov-100 px-3 py-1 text-sm font-semibold">
-                {marks(feedbackMarks, 4)}
-              </div>
-            </div>
-            <div className="mt-6 rounded-xl bg-slateink-50 ring-1 ring-slateink-100 px-4 py-3 text-sm text-slateink-700 flex items-center gap-2">
-              <MessageSquareText className="h-4 w-4" />
-              <span>Low rating (1–2): {risk?.low_rating_1_2?.pct ?? 0}%</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Analytics */}
-        <Card className="rounded-2xl">
-          <CardContent>
-            <div className="flex items-start justify-between gap-3 pt-5">
-              <div>
-                <div className="text-sm font-semibold tracking-wide text-slateink-700">ANALYTICS</div>
-                <div className="mt-4 inline-flex items-center gap-2 rounded-xl bg-indigo-50/60 ring-1 ring-indigo-100 px-3 py-2 text-sm font-semibold text-indigo-800">
-                  <Timer className="h-4 w-4" />
-                  AI COVERAGE: {aiPct}%
-                </div>
-                <div className="mt-5 space-y-2">
-                  <div className="rounded-xl bg-emerald-50/60 ring-1 ring-emerald-100 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Executive Overview + Issue Intelligence ready</span>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-full bg-gov-50 text-gov-800 ring-1 ring-gov-100 px-3 py-1 text-sm font-semibold">
-                {marks(analyticsMarks, 3)}
-              </div>
-            </div>
-            <div className="mt-4 text-xs text-slateink-500">AI coverage computed from non-empty sub-topics: {aiKnown}/{aiTotal}.</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Keep existing visual metric cards, but de-emphasize under scorecard */}
-      <div className="rounded-2xl bg-white ring-1 ring-slateink-100 p-4">
-        <div className="text-sm font-semibold text-slateink-800">Operational Totals</div>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard title="Total grievances" value={total} subtitle="Selected Created Date range" />
-          <StatCard title="Average closure time" value={avgClosure} subtitle={`Coverage: ${closureCoverage?.known ?? 0}/${closureCoverage?.total ?? 0}`} />
-          <StatCard title="Average feedback rating" value={avgRating} subtitle={`Coverage: ${ratingCoverage?.known ?? 0}/${ratingCoverage?.total ?? 0}`} />
-          <StatCard title="Open backlog" value={openBacklog} subtitle="From status breakdown (best-effort)" />
-        </div>
+      {/* At-a-glance KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard title="Total grievances" value={total} subtitle="Selected date range" />
+        <StatCard
+          title="Avg closure time"
+          value={data?.totals?.avg_closure_time_days != null ? `${fmtInt(data.totals.avg_closure_time_days)} days` : "—"}
+          subtitle={`Coverage: ${closureCoverage?.known ?? 0}/${closureCoverage?.total ?? 0}`}
+        />
+        <StatCard
+          title="Escalation rate"
+          value={Number.isFinite(Number(escalationRate)) ? `${fmt1(escalationRate)}%` : "—"}
+          subtitle={`Escalated: ${escalatedCount}`}
+        />
+        <StatCard
+          title="Avg rating"
+          value={data?.totals?.avg_rating != null ? `${fmt1(data.totals.avg_rating)} / 5` : "—"}
+          subtitle={`Rated: ${ratingCoverage?.known ?? 0}/${ratingCoverage?.total ?? 0}`}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">

@@ -42,7 +42,7 @@ export default function IssueIntelligence() {
   const [subtopicFocus, setSubtopicFocus] = useState("");
   const [modeOverall, setModeOverall] = useState("volume");
   const [modeWard, setModeWard] = useState("volume");
-  const [showAvgActionable, setShowAvgActionable] = useState(true);
+  // Removed: avg actionable score overlay from the month-wise trend chart (keep counts only).
   const [uniquePriorityOnly, setUniquePriorityOnly] = useState(false);
   const [uniqueHighOnly, setUniqueHighOnly] = useState(false);
   const [error, setError] = useState("");
@@ -358,7 +358,7 @@ export default function IssueIntelligence() {
             Month-wise Sub-Topic Trends {showAI ? <AIBadge /> : null}
           </span>
         }
-        subtitle="Counts grouped by month (Created Date). Optional: avg actionable score."
+        subtitle="Counts grouped by month (Created Date)."
         ai={showAI}
         right={
           <div className="flex flex-wrap items-center gap-2">
@@ -374,17 +374,12 @@ export default function IssueIntelligence() {
                 </option>
               ))}
             </select>
-            <label className="inline-flex items-center gap-2 text-xs text-slateink-600">
-              <input type="checkbox" checked={showAvgActionable} onChange={(e) => setShowAvgActionable(e.target.checked)} />
-              Show avg actionable score
-            </label>
           </div>
         }
         data={payload?.trend?.months || []}
         xKey="month"
         lines={[
-          { key: "count", name: "Grievances", color: colorForKey(subtopicFocus) },
-          ...(showAvgActionable ? [{ key: "avg_actionable_score", name: "Avg actionable", color: "#7c3aed" }] : [])
+          { key: "count", name: "Grievances", color: colorForKey(subtopicFocus) }
         ]}
         height={340}
       />

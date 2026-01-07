@@ -50,6 +50,10 @@ class Settings:
     data_raw_dir: str = os.getenv("DATA_RAW_DIR", str((repo_root / "data/raw").resolve()))
     # Optional additional input folder used for new exports with extra columns (e.g., raw2).
     data_raw2_dir: str = os.getenv("DATA_RAW2_DIR", str((repo_root / "data/raw2").resolve()))
+    # Optional delta input folder (e.g., raw3 extra grievances).
+    data_raw3_dir: str = os.getenv("DATA_RAW3_DIR", str((repo_root / "data/raw3").resolve()))
+    # Optional additional Excel dump folder (e.g., raw4 with "Details" sheet).
+    data_raw4_dir: str = os.getenv("DATA_RAW4_DIR", str((repo_root / "data/raw4").resolve()))
     data_processed_dir: str = os.getenv("DATA_PROCESSED_DIR", str((repo_root / "data/processed").resolve()))
     data_runs_dir: str = os.getenv("DATA_RUNS_DIR", str((repo_root / "data/runs").resolve()))
     # Batch pipeline outputs (Gemini results parquet/csv)

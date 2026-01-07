@@ -21,6 +21,8 @@ services:
       SAMPLE_CSV_PATH: /app/data/raw/sample_grievances.csv
       # For real NMMC files dropped into data/raw, keep seeding off to avoid mixing demo data.
       SEED_SAMPLE_DATA: "false"
+      # Some keys do not have access to "flash-lite" models (403). Use a broadly available fallback.
+      GEMINI_MODEL_FALLBACK: gemini-2.0-flash
       # Keep false for normal use; set true only if you intentionally want to wipe and recreate the SQLite DB.
       RECREATE_DB_ON_STARTUP: "false"
       CORS_ORIGINS: http://localhost:3000

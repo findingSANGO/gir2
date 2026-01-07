@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Activity, BarChart3, Brain, Clock, Database, FileText, LayoutDashboard, Shield, Star } from "lucide-react";
+import { Activity, BarChart3, Brain, Clock, Database, LayoutDashboard, Shield, Star } from "lucide-react";
 import clsx from "clsx";
 
 const items = [
@@ -9,8 +9,7 @@ const items = [
   { to: "/issue-intelligence2", label: "Issue Intelligence 2", icon: BarChart3 },
   { to: "/feedback-analytics", label: "Citizen Feedback", icon: Star },
   { to: "/closure-analytics", label: "Closure Analytics", icon: Clock },
-  { to: "/predictive-analytics", label: "Predictive Analytics", icon: Brain },
-  { to: "/evidence", label: "Evidence", icon: FileText, roles: ["commissioner", "it_head"] }
+  { to: "/predictive-analytics", label: "Predictive Analytics", icon: Brain }
 ];
 
 export default function Sidebar() {

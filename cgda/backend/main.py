@@ -173,13 +173,93 @@ def create_app() -> FastAPI:
                         )
                         print(f"[PIPELINE] Preprocess completed: processed_data_10738 rows={pre.get('record_count')}")
 
+                        # 1b) Delta ingest: append new grievances from data/raw3/extra_grievances.csv into processed_data_10738
+                        delta_added = 0
+                        try:
+                            raw3_path = os.path.join(getattr(settings, "data_raw3_dir", ""), "extra_grievances.csv")
+                            if raw3_path and os.path.exists(raw3_path):
+                                delta = psvc.preprocess_delta(
+                                    db,
+                                    raw_filename="extra_grievances.csv",
+                                    raw_dir="raw3",
+                                    dedupe_mode="id",
+                                    output_source="processed_data_10738",
+                                )
+                                delta_added = int(delta.get("record_count") or 0)
+                                print(
+                                    f"[PIPELINE] Delta preprocess completed: raw3/extra_grievances.csv new_rows={delta.get('record_count')}"
+                                )
+                            else:
+                                print("[PIPELINE] No raw3/extra_grievances.csv found; skipping delta ingest.")
+                        except Exception as e:
+                            print(f"[PIPELINE] Delta ingest failed (continuing): {type(e).__name__}: {e}")
+
                         # Export preprocess CSV
                         pre_csv = os.path.join(settings.data_preprocess_dir, "processed_data_10738.csv")
                         n_pre = psvc.export_source_to_csv(db, source="processed_data_10738", out_path=pre_csv, limit_rows=None)
                         print(f"[PIPELINE] Wrote preprocess CSV: {pre_csv} rows={n_pre}")
 
+                        # 1c) Optional raw4 ingest: Excel export with "Details" sheet (deduped by id to ~11280).
+                        # This is loaded as a separate dataset source so the Datasets tab can browse it directly.
+                        try:
+                            raw4_name = "NMMC - Grievance Data - 07.01.2026.xlsx"
+                            raw4_path = os.path.join(getattr(settings, "data_raw4_dir", ""), raw4_name)
+                            if raw4_path and os.path.exists(raw4_path):
+                                out_src = "processed_data_raw4"
+                                pre4 = psvc.preprocess_latest(
+                                    db,
+                                    raw_filename=raw4_name,
+                                    raw_dir="raw4",
+                                    limit_rows=None,
+                                    dedupe_mode="id",
+                                    output_source=out_src,
+                                )
+                                print(f"[PIPELINE] Raw4 preprocess completed: {out_src} rows={pre4.get('record_count')}")
+                                pre4_csv = os.path.join(settings.data_preprocess_dir, f"{out_src}.csv")
+                                n_pre4 = psvc.export_source_to_csv(db, source=out_src, out_path=pre4_csv, limit_rows=None)
+                                print(f"[PIPELINE] Wrote raw4 preprocess CSV: {pre4_csv} rows={n_pre4}")
+
+                                # If the staged/master dataset already has AI outputs, backfill them into raw4
+                                # so the Datasets tab can show 11280 rows + AI without rerunning Gemini.
+                                try:
+                                    n_backfill = psvc.backfill_ai_fields_from_source(
+                                        db,
+                                        target_source=out_src,
+                                        from_source="processed_data_500",
+                                        join_key="raw_id",
+                                    )
+                                    print(f"[PIPELINE] Raw4 AI backfill from processed_data_500 by raw_id: updated_rows={int(n_backfill)}")
+
+                                    # Export an explicit ai_outputs snapshot for raw4 too (for auditing/debug).
+                                    raw4_ai_csv = os.path.join(settings.data_ai_outputs_dir, f"{out_src}_ai_outputs.csv")
+                                    n_raw4_ai = psvc.export_source_to_csv(db, source=out_src, out_path=raw4_ai_csv, limit_rows=None)
+                                    print(f"[PIPELINE] Wrote raw4 ai_outputs CSV: {raw4_ai_csv} rows={int(n_raw4_ai)}")
+
+                                    # Enrich ONLY missing AI rows via Gemini to complete the dataset.
+                                    # This is resumable/idempotent via checkpoints, and will re-export the ai_outputs CSV on completion.
+                                    try:
+                                        run4_id = svc.start_ticket_enrichment_background(
+                                            db,
+                                            source=out_src,
+                                            limit_rows=None,
+                                            force_reprocess=False,
+                                            only_missing=True,
+                                        )
+                                        print(f"[PIPELINE] Started Gemini enrichment for raw4 missing rows: run_id={run4_id} source={out_src}")
+                                    except Exception as e:
+                                        print(f"[PIPELINE] Raw4 missing-row Gemini enrich failed to start (continuing): {type(e).__name__}: {e}")
+                                except Exception as e:
+                                    print(f"[PIPELINE] Raw4 AI backfill/export failed (continuing): {type(e).__name__}: {e}")
+                            else:
+                                print("[PIPELINE] No raw4 excel found; skipping raw4 ingest.")
+                        except Exception as e:
+                            print(f"[PIPELINE] Raw4 ingest failed (continuing): {type(e).__name__}: {e}")
+
                         # 2) Stage dataset: first N rows into processed_data_500 (N controlled by AUTO_STAGE_ROWS)
                         stage_rows = int(getattr(settings, "auto_stage_rows", 500) or 500)
+                        # If we appended delta rows, default to staging the full updated master so the app reflects the new records.
+                        if delta_added > 0:
+                            stage_rows = max(stage_rows, int(n_pre or 0))
                         # Allow larger staged datasets (e.g., 10k) while still keeping a guardrail.
                         # clone_sample_source supports up to 20k, which is plenty for local demo/debug.
                         stage_rows = max(1, min(stage_rows, 20000))

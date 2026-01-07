@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Download, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import { api } from "../services/api.js";
 import { Card, CardContent, CardHeader } from "../components/ui/Card.jsx";
 import Button from "../components/ui/Button.jsx";
@@ -13,10 +13,6 @@ function fmtDate(iso) {
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function isEnriched(ds) {
-  return Number(ds?.ai_subtopic_rows || 0) > 0 || Number(ds?.ai_category_rows || 0) > 0;
-}
-
 export default function Datasets() {
   const { search } = useLocation();
   const navigate = useNavigate();
@@ -25,26 +21,33 @@ export default function Datasets() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingRows, setLoadingRows] = useState(false);
-  const [building, setBuilding] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState("ai_records"); // ai_records | preview
+  const [pageSize, setPageSize] = useState(50);
+  const [pageOffset, setPageOffset] = useState(0);
+  const [totalRows, setTotalRows] = useState(0);
+  const [quality, setQuality] = useState(null);
+  const [qualityLoading, setQualityLoading] = useState(false);
+  const [aiCoverage, setAiCoverage] = useState(null);
+  const [aiCoverageLoading, setAiCoverageLoading] = useState(false);
 
   async function refreshDatasets({ preferSource = null } = {}) {
     setLoading(true);
     setError("");
     const res = await api.datasetsProcessed();
     const all = res?.datasets || [];
-    const enriched = all.filter(isEnriched);
-    setDatasets(enriched);
+    setDatasets(all);
 
     if (preferSource) {
       setSource(preferSource);
       return;
     }
 
-    // Default: show run1_100 if available, else first enriched dataset.
-    const run1 = enriched.find((d) => String(d.source || "").includes("__run1_100"));
-    const chosen = run1?.source || enriched[0]?.source || "";
+    // Default: prefer the final full dataset when available.
+    const preferred =
+      all.find((d) => d.source === "processed_data_raw4")?.source ||
+      all.find((d) => d.source === "processed_data_500")?.source;
+    const chosen = preferred || all[0]?.source || "";
     setSource(chosen);
   }
 
@@ -58,12 +61,12 @@ export default function Datasets() {
         const res = await api.datasetsProcessed();
         if (cancelled) return;
         const all = res?.datasets || [];
-        const enriched = all.filter(isEnriched);
-        setDatasets(enriched);
+        setDatasets(all);
 
-        // Default: show run1_100 if available, else first enriched dataset.
-        const run1 = enriched.find((d) => String(d.source || "").includes("__run1_100"));
-        const chosen = run1?.source || enriched[0]?.source || "";
+        const preferred =
+          all.find((d) => d.source === "processed_data_raw4")?.source ||
+          all.find((d) => d.source === "processed_data_500")?.source;
+        const chosen = preferred || all[0]?.source || "";
         setSource(chosen);
       } catch (e) {
         if (!cancelled) setError(e.message || "Failed to load datasets");
@@ -107,28 +110,17 @@ export default function Datasets() {
     (async () => {
       if (!source) {
         setRows([]);
+        setTotalRows(0);
+        setPageOffset(0);
         return;
       }
       setLoadingRows(true);
       setError("");
       try {
-        const first = await api.dataResults(200, 0, { source });
+        const res = await api.dataResults(Number(pageSize || 50), Number(pageOffset || 0), { source });
         if (cancelled) return;
-        const total = Number(first?.total_rows || 0);
-        let out = [...(first?.rows || [])];
-
-        // Fetch remaining pages only if needed (cap to keep UI fast)
-        const hardCap = 5000;
-        let offset = out.length;
-        while (offset < total && offset < hardCap) {
-          // eslint-disable-next-line no-await-in-loop
-          const page = await api.dataResults(200, offset, { source });
-          if (cancelled) return;
-          out = out.concat(page?.rows || []);
-          offset = out.length;
-        }
-
-        setRows(out);
+        setRows(res?.rows || []);
+        setTotalRows(Number(res?.total_rows || 0));
       } catch (e) {
         if (!cancelled) setError(e.message || "Failed to load dataset rows");
       } finally {
@@ -138,12 +130,62 @@ export default function Datasets() {
     return () => {
       cancelled = true;
     };
+  }, [source, pageSize, pageOffset]);
+
+  // Load cross-check stats for selected dataset
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!source) {
+        setQuality(null);
+        return;
+      }
+      setQualityLoading(true);
+      try {
+        const q = await api.datasetQuality(source);
+        if (cancelled) return;
+        setQuality(q);
+      } catch (e) {
+        if (cancelled) return;
+        // Keep page usable even if this fails.
+        setQuality(null);
+      } finally {
+        if (!cancelled) setQualityLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [source]);
 
-  const downloadHref = useMemo(() => {
-    if (!source) return "#";
-    const q = new URLSearchParams({ source });
-    return `/api/data/processed/download?${q.toString()}`;
+  // Load AI column coverage stats for selected dataset
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!source) {
+        setAiCoverage(null);
+        return;
+      }
+      setAiCoverageLoading(true);
+      try {
+        const c = await api.aiCoverage(source);
+        if (cancelled) return;
+        setAiCoverage(c);
+      } catch (e) {
+        if (cancelled) return;
+        setAiCoverage(null);
+      } finally {
+        if (!cancelled) setAiCoverageLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+
+  useEffect(() => {
+    // Reset pagination on dataset switch.
+    setPageOffset(0);
   }, [source]);
 
   const inputCols = [
@@ -173,12 +215,44 @@ export default function Datasets() {
     { key: "ai_error", label: "ai_error" }
   ];
 
+  const aiCoverageRows = useMemo(() => {
+    const total = Number(aiCoverage?.total_rows || 0);
+    const counts = aiCoverage?.counts || {};
+    const order = [
+      "ai_category",
+      "ai_subtopic",
+      "ai_confidence",
+      "ai_issue_type",
+      "ai_entities",
+      "ai_urgency",
+      "ai_sentiment",
+      "ai_resolution_quality",
+      "ai_reopen_risk",
+      "ai_feedback_driver",
+      "ai_closure_theme",
+      "ai_extra_summary",
+      "ai_model",
+      "ai_error"
+    ];
+    return order.map((k) => {
+      const filled = Number(counts?.[k] || 0);
+      const blank = Math.max(0, total - filled);
+      const pct = total > 0 ? Math.round((filled / total) * 1000) / 10 : 0;
+      return { key: k, filled, blank, pct, total };
+    });
+  }, [aiCoverage]);
+
+  const page = Math.floor((pageOffset || 0) / (pageSize || 50)) + 1;
+  const totalPages = totalRows ? Math.max(1, Math.ceil(totalRows / (pageSize || 50))) : 1;
+  const canPrev = (pageOffset || 0) > 0;
+  const canNext = (pageOffset || 0) + (pageSize || 50) < totalRows;
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader
           title="Datasets"
-          subtitle="AI-enriched dataset snapshots available for dashboards (stored in SQLite; no Gemini calls on page load)."
+          subtitle="Browse AI-enriched dataset snapshots used by dashboards (read-only)."
           right={
             <div className="flex items-center gap-2">
               <Badge variant="ai">Enriched only</Badge>
@@ -200,7 +274,7 @@ export default function Datasets() {
                 disabled={loading}
                 className="mt-1 h-11 w-full rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100 disabled:bg-slateink-50"
               >
-                {!datasets.length ? <option value="">No enriched datasets found</option> : null}
+                {!datasets.length ? <option value="">No datasets found</option> : null}
                 {datasets.map((d) => (
                   <option key={d.source} value={d.source}>
                     {d.source}
@@ -229,42 +303,104 @@ export default function Datasets() {
                   Preview (compact)
                 </Button>
               </div>
-              <Button
-                variant="dark"
-                disabled={!source || building}
-                onClick={async () => {
-                  if (!source) return;
-                  setBuilding(true);
-                  setError("");
-                  try {
-                    const res = await api.buildAiOutputDataset({
-                      baseSource: source,
-                      sampleSize: 100,
-                      outputSource: "ai_output_dataset",
-                      forceReprocess: true
-                    });
-                    await refreshDatasets({ preferSource: res?.output_source || "ai_output_dataset" });
-                  } catch (e) {
-                    setError(e.message || "Failed to start Gemini run");
-                  } finally {
-                    setBuilding(false);
-                  }
-                }}
-                title="Clone 100 rows from selected dataset into ai_output_dataset and run Gemini enrichment"
-              >
-                {building ? "Starting Gemini…" : "Build AI Output (100)"}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => window.open(downloadHref, "_blank", "noopener,noreferrer")}
-                disabled={!source}
-                title="Download processed dataset as CSV"
-              >
-                <Download className="h-4 w-4" />
-                Download CSV
-              </Button>
             </div>
           </div>
+
+          {source ? (
+            <div className="mt-4 rounded-2xl bg-white ring-1 ring-slateink-100 p-4">
+              <div className="text-sm font-semibold text-slateink-900">Dataset quality cross-checks</div>
+              <div className="mt-1 text-xs text-slateink-500">
+                Counts are computed on the selected dataset source in SQLite (fast aggregates).
+              </div>
+              {qualityLoading ? (
+                <div className="mt-3 text-sm text-slateink-600">Loading…</div>
+              ) : quality ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
+                    <div className="text-[11px] font-semibold text-slateink-600">Total rows</div>
+                    <div className="mt-1 text-lg font-semibold text-slateink-900">{Number(quality.total_rows || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
+                    <div className="text-[11px] font-semibold text-slateink-600">Duplicate rows</div>
+                    <div className="mt-1 text-lg font-semibold text-slateink-900">
+                      {Number(quality?.duplicates?.duplicate_rows || 0).toLocaleString()}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slateink-500">By raw_id</div>
+                  </div>
+                  <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
+                    <div className="text-[11px] font-semibold text-slateink-600">Deduplicated total</div>
+                    <div className="mt-1 text-lg font-semibold text-slateink-900">
+                      {Number(quality.deduplicated_total_rows || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
+                    <div className="text-[11px] font-semibold text-slateink-600">Has closing date</div>
+                    <div className="mt-1 text-lg font-semibold text-slateink-900">
+                      {Number(quality.closed_date_rows || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3">
+                    <div className="text-[11px] font-semibold text-slateink-600">Has rating</div>
+                    <div className="mt-1 text-lg font-semibold text-slateink-900">
+                      {Number(quality.star_rating_rows || 0).toLocaleString()}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slateink-500">
+                      Both: {Number(quality.closed_date_and_star_rating_rows || 0).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-slateink-600">Cross-checks unavailable for this dataset.</div>
+              )}
+
+              <div className="mt-5 border-t border-slateink-100 pt-4">
+                <div className="text-sm font-semibold text-slateink-900">AI output coverage (by column)</div>
+                <div className="mt-1 text-xs text-slateink-500">
+                  Filled = non-empty values present in `grievances_processed` for the selected dataset source.
+                </div>
+                {aiCoverageLoading ? (
+                  <div className="mt-3 text-sm text-slateink-600">Loading…</div>
+                ) : aiCoverage ? (
+                  <div className="mt-3 overflow-auto rounded-xl ring-1 ring-slateink-100">
+                    <table className="min-w-[720px] w-full border-collapse bg-white text-sm">
+                      <thead className="bg-emerald-50 text-emerald-900">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold whitespace-nowrap border-b border-emerald-100">
+                            AI column
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap border-b border-emerald-100">
+                            Filled
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap border-b border-emerald-100">
+                            Blank
+                          </th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap border-b border-emerald-100">
+                            Coverage
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {aiCoverageRows.map((r) => (
+                          <tr key={r.key} className="border-t border-slateink-100">
+                            <td className="px-3 py-2 bg-emerald-50/60 font-semibold text-emerald-900 whitespace-nowrap">
+                              {r.key}
+                            </td>
+                            <td className="px-3 py-2 text-right bg-white tabular-nums">{r.filled.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right bg-white tabular-nums text-slateink-600">{r.blank.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right bg-white tabular-nums">
+                              {r.total ? `${r.pct.toLocaleString()}%` : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-slateink-600">AI coverage unavailable for this dataset.</div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -283,7 +419,9 @@ export default function Datasets() {
             source
               ? loadingRows
                 ? "Loading rows…"
-                : `Showing ${rows.length.toLocaleString()} row(s)`
+                : totalRows
+                  ? `Page ${page.toLocaleString()} of ${totalPages.toLocaleString()} • ${totalRows.toLocaleString()} total row(s)`
+                  : `Showing ${rows.length.toLocaleString()} row(s)`
               : "Select a dataset snapshot to view records"
           }
         />
@@ -298,17 +436,43 @@ export default function Datasets() {
             <div className="overflow-auto rounded-xl ring-1 ring-slateink-100">
               {view === "ai_records" ? (
                 <div className="p-3 bg-white">
-                  <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="text-xs font-semibold text-slateink-600">Legend:</span>
-                    <span className="rounded-full bg-amber-50 text-amber-900 ring-1 ring-amber-200 px-2 py-1 text-[11px] font-semibold">
-                      Collected data (raw/preprocessed)
-                    </span>
-                    <span className="rounded-full bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 px-2 py-1 text-[11px] font-semibold">
-                      AI outputs (Gemini)
-                    </span>
-                    <span className="text-[11px] text-slateink-500">
-                      Columns align to `ticket_record_enrichment_prompt.txt` output schema.
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-slateink-600">Legend:</span>
+                      <span className="rounded-full bg-amber-50 text-amber-900 ring-1 ring-amber-200 px-2 py-1 text-[11px] font-semibold">
+                        Collected data (raw/preprocessed)
+                      </span>
+                      <span className="rounded-full bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 px-2 py-1 text-[11px] font-semibold">
+                        AI outputs
+                      </span>
+                      <span className="text-[11px] text-slateink-500">
+                        Columns align to the configured AI output schema.
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slateink-600">Rows per page</label>
+                      <select
+                        value={String(pageSize)}
+                        onChange={(e) => {
+                          const next = Number(e.target.value || 50);
+                          setPageSize(next);
+                          setPageOffset(0);
+                        }}
+                        className="h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+                      >
+                        {[25, 50, 100, 200].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                      <Button variant="secondary" disabled={!canPrev} onClick={() => setPageOffset(Math.max(0, pageOffset - pageSize))}>
+                        Prev
+                      </Button>
+                      <Button variant="secondary" disabled={!canNext} onClick={() => setPageOffset(pageOffset + pageSize)}>
+                        Next
+                      </Button>
+                    </div>
                   </div>
                   <table className="min-w-[1600px] w-full border-collapse bg-white text-sm">
                     <thead className="text-slateink-700">

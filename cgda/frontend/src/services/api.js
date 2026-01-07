@@ -96,6 +96,8 @@ export const api = {
   // Dimensions for filter dropdowns (sourced from grievances_processed for date-range analytics)
   dimensions: () => request("/api/analytics/dimensions_processed"),
   datasetsProcessed: () => request("/api/analytics/datasets_processed"),
+  datasetQuality: (source) => request(`/api/analytics/dataset_quality${toQuery({ source })}`),
+  aiCoverage: (source) => request(`/api/analytics/ai_coverage${toQuery({ source })}`),
   retrospective: (params) => request(`/api/analytics/retrospective${toQuery(params)}`),
   inferential: (params) => request(`/api/analytics/inferential${toQuery(params)}`),
   feedback: (params) => request(`/api/analytics/feedback${toQuery(params)}`),
@@ -107,7 +109,7 @@ export const api = {
   executiveOverview: (params) => request(`/api/analytics/executive-overview${toQuery(params)}`),
   executiveOverviewV2: (params) => request(`/api/executive_overview${toQuery(params)}`),
   issueIntelligenceV2: (params) => request(`/api/issue_intelligence${toQuery(params)}`),
-  pipelineStatus: (params) => request(`/api/debug/pipeline_status${toQuery(params)}`),
+  // pipelineStatus removed from production UI (debug-only).
   topSubtopics: (params, topN = 10) => request(`/api/analytics/top-subtopics${toQuery({ ...(params || {}), top_n: topN })}`),
   topSubtopicsByWard: (ward, params, topN = 5) =>
     request(`/api/analytics/top-subtopics/by-ward${toQuery({ ...(params || {}), ward, top_n: topN })}`),

@@ -109,7 +109,11 @@ class EnrichmentService:
             return Path(settings.data_raw_dir)
         if key in ("raw2", "data/raw2"):
             return Path(getattr(settings, "data_raw2_dir", "../data/raw2"))
-        raise ValueError("raw_dir must be 'raw' or 'raw2'")
+        if key in ("raw3", "data/raw3"):
+            return Path(getattr(settings, "data_raw3_dir", Path(getattr(settings, "data_raw2_dir", "../data/raw2")).parent / "raw3"))
+        if key in ("raw4", "data/raw4"):
+            return Path(getattr(settings, "data_raw4_dir", Path(getattr(settings, "data_raw2_dir", "../data/raw2")).parent / "raw4"))
+        raise ValueError("raw_dir must be 'raw', 'raw2', 'raw3', or 'raw4'")
 
     def list_raw_files(self, *, raw_dir: str | None = None) -> list[LatestRawFile]:
         base = self._resolve_raw_dir(raw_dir)
@@ -293,6 +297,18 @@ class EnrichmentService:
             df.attrs["__sheet_name__"] = sheet
             df.attrs["__header_row__"] = header_row
             return df
+        # If there is a "Details" sheet (raw4 style export), prefer it over the first sheet.
+        # This sheet typically contains the row-level table we want, while the first sheet may be a Pivot.
+        details_sheet = None
+        for s in xl.sheet_names:
+            if str(s).strip().lower() == "details":
+                details_sheet = s
+                break
+        if details_sheet:
+            df = pd.read_excel(p, sheet_name=details_sheet)
+            df.attrs["__sheet_name__"] = details_sheet
+            df.attrs["__header_row__"] = 0
+            return df
         # Fallback: use default header row
         return pd.read_excel(p)
 
@@ -361,6 +377,36 @@ class EnrichmentService:
                 missing.append(col)
 
         if missing:
+            # Support the "raw3" / Close Grievances-style dump (snake_case columns).
+            # This dataset doesn't match the NMMC/IES export headers but contains equivalent fields.
+            # We map the required logical columns to their closest available counterparts.
+            def pick_any(*candidates: str) -> str | None:
+                for cand in candidates:
+                    key = _norm_col(cand)
+                    if key in norm_map:
+                        return norm_map[key]
+                return None
+
+            raw3_id = pick_any("id")
+            raw3_subject = pick_any("subject", "complaint_subject")
+            raw3_desc = pick_any("description", "complaint_description")
+            raw3_created = pick_any("grievance_date", "created_date", "created_at", "grievance created date")
+            if raw3_id and raw3_subject and raw3_desc and raw3_created:
+                return {
+                    "Grievance Id": raw3_id,
+                    "Created Date": raw3_created,
+                    "Reported by User Name": pick_any("fullname", "applicant_name", "grievance_by") or raw3_id,
+                    "Mobile No.": pick_any("mobile", "mobile_no", "mobile no.") or raw3_id,
+                    "Complaint Location": pick_any("address", "complaint_location", "complaint location") or raw3_id,
+                    "Complaint Subject": raw3_subject,
+                    "Complaint Description": raw3_desc,
+                    "Current Status": pick_any("status", "current_status", "current status") or raw3_id,
+                    "Current Department Name": pick_any("department", "current_department_name", "current department name") or raw3_id,
+                    "Ward Name": pick_any("ward_name", "ward") or raw3_id,
+                    "Current User Name": pick_any("empname", "assign", "current user name") or raw3_id,
+                    "Closing Remark": pick_any("closeremark", "close_remark", "closing_remark", "closing remark") or raw3_id,
+                }
+
             found = list(map(str, df.columns))
             raise ValueError(
                 "Input file schema mismatch.\n"
@@ -563,6 +609,7 @@ class EnrichmentService:
         source: str,
         limit_rows: int | None = None,
         force_reprocess: bool = False,
+        only_missing: bool = False,
     ) -> str:
         """
         Enrich already-preprocessed ticket records stored in grievances_processed.
@@ -580,6 +627,7 @@ class EnrichmentService:
                     "source": source,
                     "limit_rows": int(limit_rows) if limit_rows else None,
                     "force_reprocess": bool(force_reprocess),
+                    "only_missing": bool(only_missing),
                 }
             ),
         )
@@ -588,7 +636,7 @@ class EnrichmentService:
 
         t = threading.Thread(
             target=self._run_ticket_enrich,
-            args=(run_id, source, limit_rows, force_reprocess),
+            args=(run_id, source, limit_rows, force_reprocess, only_missing),
             daemon=True,
             name=f"ticket-enrich-{run_id}",
         )
@@ -676,6 +724,7 @@ class EnrichmentService:
         source: str,
         limit_rows: int | None,
         force_reprocess: bool,
+        only_missing: bool = False,
     ) -> None:
         from database import session_scope
         from models import GrievanceProcessed, RowEnrichmentCheckpoint, TicketEnrichmentCheckpoint
@@ -689,15 +738,54 @@ class EnrichmentService:
 
         try:
             with session_scope() as db:
+                # Determine whether this dataset is row-unique by raw_id.
+                # If raw_id is fully populated and unique within the source, we checkpoint per raw_id (row_mode),
+                # which prevents ticket-level (grievance_code) collisions from skipping distinct rows.
+                try:
+                    from sqlalchemy import func
+
+                    total_src = int(
+                        db.execute(
+                            select(func.count()).select_from(GrievanceProcessed).where(GrievanceProcessed.source_raw_filename == source)
+                        ).scalar_one()
+                        or 0
+                    )
+                    uniq_raw = int(
+                        db.execute(
+                            select(func.count(func.distinct(GrievanceProcessed.raw_id)))
+                            .select_from(GrievanceProcessed)
+                            .where(GrievanceProcessed.source_raw_filename == source, GrievanceProcessed.raw_id.is_not(None))
+                        ).scalar_one()
+                        or 0
+                    )
+                    row_mode = total_src > 0 and uniq_raw == total_src
+                except Exception:
+                    row_mode = False
+
                 # Process in pages to avoid loading the full dataset into memory (important for 10k+).
-                base_q = (
-                    select(GrievanceProcessed)
-                    .where(GrievanceProcessed.source_raw_filename == source)
-                    .order_by(GrievanceProcessed.source_row_index.asc().nullslast(), GrievanceProcessed.created_date.asc().nullslast())
+                missing_filter = None
+                if bool(only_missing):
+                    # Only enrich rows that are missing core AI outputs.
+                    # (We use ai_subtopic/ai_category as the minimum "enriched" signal for dashboards.)
+                    missing_filter = (
+                        (GrievanceProcessed.ai_subtopic.is_(None))
+                        | (func.trim(GrievanceProcessed.ai_subtopic) == "")
+                        | (GrievanceProcessed.ai_category.is_(None))
+                        | (func.trim(GrievanceProcessed.ai_category) == "")
+                    )
+
+                base_q = select(GrievanceProcessed).where(GrievanceProcessed.source_raw_filename == source)
+                if missing_filter is not None:
+                    base_q = base_q.where(missing_filter)
+                base_q = base_q.order_by(
+                    GrievanceProcessed.source_row_index.asc().nullslast(),
+                    GrievanceProcessed.created_date.asc().nullslast(),
                 )
 
                 # total rows (bounded by limit_rows if provided)
                 total_q = select(func.count()).select_from(GrievanceProcessed).where(GrievanceProcessed.source_raw_filename == source)
+                if missing_filter is not None:
+                    total_q = total_q.where(missing_filter)
                 total_all = int(db.scalar(total_q) or 0)
                 total = min(total_all, int(limit_rows)) if limit_rows else total_all
 
@@ -705,16 +793,22 @@ class EnrichmentService:
                 run.total_rows = int(total)
                 db.commit()
 
-                # Choose checkpoint keying strategy:
-                # - ticket mode: keyed by grievance_code (older behavior)
-                # - row mode: keyed by grievance_id (required for __id_unique datasets)
-                row_mode = str(source or "").endswith("__id_unique") or "__id_unique__" in str(source or "")
-
+                existing_ticket: dict[str, TicketEnrichmentCheckpoint] = {}
                 if row_mode:
                     existing = {
                         c.raw_id: c
                         for c in db.execute(
                             select(RowEnrichmentCheckpoint).where(RowEnrichmentCheckpoint.raw_id.is_not(None))
+                        )
+                        .scalars()
+                        .all()
+                    }
+                    # Backwards-compatibility: older runs may have ticket-level checkpoints only.
+                    # Use them as a safe skip path when the input hash matches.
+                    existing_ticket = {
+                        c.grievance_code: c
+                        for c in db.execute(
+                            select(TicketEnrichmentCheckpoint).where(TicketEnrichmentCheckpoint.grievance_code.is_not(None))
                         )
                         .scalars()
                         .all()
@@ -744,6 +838,7 @@ class EnrichmentService:
 
                     work = []
                     meta = []
+                    did_write_through = False
                     for r in rows:
                         # Use raw input id as the true primary key for id-dedup datasets.
                         key = ((r.raw_id or "").strip() if row_mode else (r.grievance_code or r.grievance_id))
@@ -763,6 +858,10 @@ class EnrichmentService:
                         }
                         ih = _sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True))
                         prev = existing.get(key)
+                        if row_mode and (not prev):
+                            tk = (r.grievance_code or r.grievance_id or "").strip()
+                            if tk:
+                                prev = existing_ticket.get(tk) or prev
                         if (not force_reprocess) and prev and prev.ai_input_hash == ih and not prev.ai_error:
                             # IMPORTANT:
                             # This row is already enriched (checkpoint hit), but staged datasets may have been rebuilt
@@ -803,6 +902,7 @@ class EnrichmentService:
                                         actionable_score=int(score),
                                     )
                                 )
+                                did_write_through = True
                             except Exception:
                                 # Never block resume on write-through.
                                 pass
@@ -810,6 +910,11 @@ class EnrichmentService:
                             continue
                         work.append(payload)
                         meta.append({"key": key, "ih": ih, "row": r})
+
+                    # If we only did checkpoint write-throughs (no Gemini calls), persist them now so
+                    # datasets_processed and dashboards immediately reflect AI outputs.
+                    if did_write_through:
+                        db.commit()
 
                 batch_size = 10
                 for start in range(0, len(work), batch_size):
@@ -819,6 +924,13 @@ class EnrichmentService:
                         out, model_used, usage = self._ticket_enrich_batch(sub)
                     except Exception as e:
                         msg = f"{type(e).__name__}: {e}"
+                        # If the API key is globally invalid/leaked, stop the run immediately (don't spam failures).
+                        if "reported as leaked" in msg.lower():
+                            run.status = "failed"
+                            run.error = msg
+                            run.finished_at = dt.datetime.utcnow()
+                            db.commit()
+                            return
                         for m in sub_meta:
                             key = m["key"]
                             ih = m["ih"]
@@ -935,7 +1047,6 @@ class EnrichmentService:
                 # File-pipeline: if we enriched a staged dataset, export AI outputs snapshot to ai_outputs folder.
                 if str(source).startswith("processed_data_"):
                     try:
-                        from config import settings
                         from services.processed_data_service import ProcessedDataService
 
                         out_name = f"{str(source)}_ai_outputs.csv"

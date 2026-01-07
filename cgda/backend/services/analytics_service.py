@@ -1252,6 +1252,7 @@ class AnalyticsService:
 
     def _processed_filter_subquery(
         self,
+        db: Session,
         *,
         start_date: dt.date,
         end_date: dt.date,
@@ -1260,23 +1261,51 @@ class AnalyticsService:
         category: str | None = None,
         source: str | None = None,
     ):
+        """
+        Returns a subquery over grievances_processed for a given filter set.
+
+        Key behavior:
+        - For normal (partial) date ranges, we filter to rows with created_date within [start_date, end_date].
+        - If the requested range covers the *entire* dated span for the selected filters (i.e., "All"),
+          we include rows with NULL created_date too, so totals match the full dataset and users don't
+          perceive "missing" records purely due to missing dates.
+        """
         # IMPORTANT: v2 endpoints must be robust to whitespace in dimension values.
         # We use trimmed comparisons here to avoid "No data" when DB values contain stray spaces.
-        q = select(GrievanceProcessed).where(
-            GrievanceProcessed.created_date.is_not(None),
-            GrievanceProcessed.created_date >= start_date,
-            GrievanceProcessed.created_date <= end_date,
-        )
+        conds = []
         if wards:
             ward_list = [w.strip() for w in wards if str(w or "").strip()]
             if ward_list:
-                q = q.where(func.trim(GrievanceProcessed.ward_name).in_(ward_list))
+                conds.append(func.trim(GrievanceProcessed.ward_name).in_(ward_list))
         if department:
-            q = q.where(func.trim(GrievanceProcessed.department_name) == str(department).strip())
+            conds.append(func.trim(GrievanceProcessed.department_name) == str(department).strip())
         if category:
-            q = q.where(func.trim(GrievanceProcessed.ai_category) == str(category).strip())
+            conds.append(func.trim(GrievanceProcessed.ai_category) == str(category).strip())
         if source:
-            q = q.where(GrievanceProcessed.source_raw_filename == source)
+            conds.append(GrievanceProcessed.source_raw_filename == source)
+
+        # Determine the full dated span for this filter set (ignoring undated rows).
+        min_d, max_d = db.execute(
+            select(func.min(GrievanceProcessed.created_date), func.max(GrievanceProcessed.created_date)).where(
+                GrievanceProcessed.created_date.is_not(None),
+                *conds,
+            )
+        ).one()
+
+        include_undated = False
+        if min_d is None or max_d is None:
+            # No dated rows at all: include undated so the dataset isn't empty.
+            include_undated = True
+        else:
+            include_undated = bool(start_date <= min_d and end_date >= max_d)
+
+        q = select(GrievanceProcessed).where(*conds)
+        if not include_undated:
+            q = q.where(
+                GrievanceProcessed.created_date.is_not(None),
+                GrievanceProcessed.created_date >= start_date,
+                GrievanceProcessed.created_date <= end_date,
+            )
         return q.subquery()
 
     def executive_overview_v2(
@@ -1298,6 +1327,7 @@ class AnalyticsService:
         """
         top_n = max(3, min(int(top_n or 10), 15))
         base = self._processed_filter_subquery(
+            db,
             start_date=start_date,
             end_date=end_date,
             wards=wards,
@@ -1553,6 +1583,7 @@ class AnalyticsService:
         """
         top_n = max(3, min(int(top_n or 10), 15))
         base = self._processed_filter_subquery(
+            db,
             start_date=start_date,
             end_date=end_date,
             wards=wards,
@@ -1757,6 +1788,7 @@ class AnalyticsService:
         # One-of-a-kind complaints (unique subtopics)
         unique_min_priority = max(0, min(int(unique_min_priority or 0), 100))
         u_q = self._processed_filter_subquery(
+            db,
             start_date=start_date,
             end_date=end_date,
             wards=wards,
@@ -1836,6 +1868,7 @@ class AnalyticsService:
         ward_entities_coverage = {"known": 0, "total": 0, "pct": 0.0}
         if ward_focus:
             wq = self._processed_filter_subquery(
+                db,
                 start_date=start_date,
                 end_date=end_date,
                 wards=[ward_focus],
@@ -1894,6 +1927,7 @@ class AnalyticsService:
         dept_table = []
         if department_focus:
             dq = self._processed_filter_subquery(
+                db,
                 start_date=start_date,
                 end_date=end_date,
                 wards=wards,
@@ -1969,6 +2003,7 @@ class AnalyticsService:
         trend_months = []
         if subtopic_focus:
             tq = self._processed_filter_subquery(
+                db,
                 start_date=start_date,
                 end_date=end_date,
                 wards=wards,

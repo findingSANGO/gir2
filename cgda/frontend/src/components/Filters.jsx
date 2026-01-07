@@ -14,7 +14,7 @@ function Select({ value, onChange, options, placeholder }) {
     <select
       value={value || ""}
       onChange={(e) => onChange(e.target.value || null)}
-      className="h-10 rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+      className="h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (
@@ -36,7 +36,7 @@ function MultiSelect({ value, onChange, options, placeholder }) {
       <button
         type="button"
         onClick={() => setOpen((s) => !s)}
-        className="h-10 rounded-xl border border-slateink-200 bg-white px-3 text-sm text-left min-w-44 hover:border-slateink-300"
+        className="h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs text-left min-w-44 hover:border-slateink-300"
       >
         {label}
       </button>
@@ -265,10 +265,10 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
   }, [filters?.start_date, filters?.end_date, isExecutive, preset]);
 
   return (
-    <div className="sticky top-[64px] z-10 bg-slateink-50/80 backdrop-blur border-b border-slateink-100">
-      <div className="mx-auto max-w-7xl px-4 lg:px-6 py-3">
-        <Card className="px-4 py-3 rounded-2xl">
-          <div className="flex flex-wrap items-end gap-3">
+    <div className="sticky top-[64px] z-10 bg-white border-b border-slateink-100">
+      <div className="mx-auto max-w-7xl px-4 lg:px-6 py-2">
+        <Card className="px-3 py-2 rounded-2xl">
+          <div className="flex flex-wrap items-end gap-2">
             <div className="flex items-center gap-2">
               <div className="text-xs font-semibold text-slateink-600">Filters</div>
               <Badge variant="default" className="px-2 py-1 text-[11px]">
@@ -276,16 +276,12 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
               </Badge>
             </div>
 
-            <div className="w-full basis-full" />
-
             {isExecutive ? (
-              <div className="min-w-[320px]">
+              <div className="min-w-[280px]">
                 <div className="text-xs font-semibold text-slateink-600">Range</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   {[
                     { key: "all", label: "All" },
-                    { key: "year", label: "Year" },
-                    { key: "qtr", label: "Qtr" },
                     { key: "month", label: "Month" },
                     { key: "week", label: "Week" },
                     { key: "yesterday", label: "Yesterday" }
@@ -311,7 +307,7 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
                           if (onApply) onApply(next);
                         }}
                         className={
-                          "h-9 rounded-full px-3 text-xs font-semibold ring-1 transition " +
+                          "h-8 rounded-full px-2 text-xs font-semibold ring-1 transition " +
                           (active
                             ? "bg-slateink-900 text-white ring-slateink-900"
                             : "bg-white text-slateink-700 ring-slateink-200 hover:ring-slateink-300")
@@ -331,7 +327,7 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
                       setCustomOpen(true);
                     }}
                     className={
-                      "h-9 rounded-full px-3 text-xs font-semibold ring-1 transition " +
+                      "h-8 rounded-full px-2 text-xs font-semibold ring-1 transition " +
                       (preset === "custom"
                         ? "bg-slateink-900 text-white ring-slateink-900"
                         : "bg-white text-slateink-700 ring-slateink-200 hover:ring-slateink-300")
@@ -355,7 +351,7 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
                         setFilters((s) => ({ ...s, start_date: p.start, end_date: p.end }));
                       }
                     }}
-                    className="mt-1 h-10 rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+                    className="mt-1 h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
                   >
                     {presets.map((p) => (
                       <option key={p.key} value={p.key}>
@@ -365,27 +361,29 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
                   </select>
                 </div>
 
-                <div>
-                  <div className="text-xs font-semibold text-slateink-600">Start</div>
-                  <input
-                    type="date"
-                    value={filters.start_date || ""}
-                    onChange={(e) => setFilters((s) => ({ ...s, start_date: e.target.value || null }))}
-                    disabled={preset !== "custom"}
-                    className="mt-1 h-10 rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100 disabled:bg-slateink-50"
-                  />
-                </div>
+                {preset === "custom" ? (
+                  <>
+                    <div>
+                      <div className="text-xs font-semibold text-slateink-600">Start</div>
+                      <input
+                        type="date"
+                        value={filters.start_date || ""}
+                        onChange={(e) => setFilters((s) => ({ ...s, start_date: e.target.value || null }))}
+                        className="mt-1 h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+                      />
+                    </div>
 
-                <div>
-                  <div className="text-xs font-semibold text-slateink-600">End</div>
-                  <input
-                    type="date"
-                    value={filters.end_date || ""}
-                    onChange={(e) => setFilters((s) => ({ ...s, end_date: e.target.value || null }))}
-                    disabled={preset !== "custom"}
-                    className="mt-1 h-10 rounded-xl border border-slateink-200 bg-white px-3 text-sm outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100 disabled:bg-slateink-50"
-                  />
-                </div>
+                    <div>
+                      <div className="text-xs font-semibold text-slateink-600">End</div>
+                      <input
+                        type="date"
+                        value={filters.end_date || ""}
+                        onChange={(e) => setFilters((s) => ({ ...s, end_date: e.target.value || null }))}
+                        className="mt-1 h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+                      />
+                    </div>
+                  </>
+                ) : null}
               </>
             )}
 

@@ -207,6 +207,16 @@ class GeminiClient:
                 response_snippet=(resp.text or "")[:500],
             )
         if resp.status_code >= 400:
+            # Common real-world failure: Google flags leaked keys and hard-denies all requests.
+            # Surface this clearly so callers can stop spamming and users know to rotate keys.
+            if resp.status_code == 403 and "reported as leaked" in (resp.text or "").lower():
+                raise GeminiError(
+                    "API key reported as leaked. Please use another API key.",
+                    model=model,
+                    reason="http",
+                    http_status=resp.status_code,
+                    response_snippet=(resp.text or "")[:500],
+                )
             raise GeminiError(
                 "Non-retryable Gemini error",
                 model=model,

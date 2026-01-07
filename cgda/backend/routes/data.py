@@ -77,6 +77,7 @@ def enrich_tickets(
     source: str = "",
     limit_rows: int | None = None,
     force_reprocess: bool = False,
+    only_missing: bool = False,
 ):
     """
     Run Gemini record-level enrichment on grievances_processed for a selected dataset source.
@@ -91,6 +92,7 @@ def enrich_tickets(
             source=source,
             limit_rows=limit_rows,
             force_reprocess=force_reprocess,
+            only_missing=only_missing,
         )
         return {"run_id": run_id}
     except Exception as e:
