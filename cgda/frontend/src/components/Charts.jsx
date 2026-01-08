@@ -41,19 +41,43 @@ function EmptyState({ text = "No data for selection." }) {
 
 function ChartTooltip({ active, payload, label, valueFormatter, total }) {
   if (!active || !payload?.length) return null;
-  const row = payload[0] || {};
-  const value = row.value;
-  const pct = total ? (Number(value || 0) / Number(total)) * 100 : null;
-  const extra = row?.payload?.tooltip_lines;
+  const rows = (payload || []).filter((r) => r && r.dataKey != null);
+  const first = rows[0] || payload[0] || {};
+  const extra = first?.payload?.tooltip_lines;
+
+  const isMulti = rows.length > 1;
+  const value = first?.value;
+  const pct = !isMulti && total ? (Number(value || 0) / Number(total)) * 100 : null;
+
+  function fmt(v) {
+    return valueFormatter ? valueFormatter(v) : v;
+  }
   return (
     <div className="rounded-xl border border-slateink-200 bg-white/95 shadow-card px-3 py-2">
       {label != null ? <div className="text-xs font-semibold text-slateink-700">{label}</div> : null}
-      <div className="mt-1 text-sm font-semibold text-slateink-900">
-        {valueFormatter ? valueFormatter(value) : value}
-        {pct != null && Number.isFinite(pct) ? (
-          <span className="ml-2 text-xs font-semibold text-slateink-500">({pct.toFixed(1)}%)</span>
-        ) : null}
-      </div>
+      {isMulti ? (
+        <div className="mt-2 space-y-1">
+          {rows.slice(0, 6).map((r, idx) => (
+            <div key={String(r.dataKey) + idx} className="flex items-center justify-between gap-4 text-xs">
+              <div className="flex items-center gap-2 text-slateink-700">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: r.color || r.stroke || "#2b54f6" }}
+                />
+                <span className="font-semibold">{r.name || r.dataKey}</span>
+              </div>
+              <div className="font-semibold text-slateink-900">{String(fmt(r.value) ?? "")}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-1 text-sm font-semibold text-slateink-900">
+          {String(fmt(value) ?? "")}
+          {pct != null && Number.isFinite(pct) ? (
+            <span className="ml-2 text-xs font-semibold text-slateink-500">({pct.toFixed(1)}%)</span>
+          ) : null}
+        </div>
+      )}
       {Array.isArray(extra) && extra.length ? (
         <div className="mt-2 space-y-1">
           {extra.slice(0, 6).map((x, idx) => (

@@ -25,8 +25,11 @@ services:
       GEMINI_MODEL_FALLBACK: gemini-2.0-flash
       # Keep false for normal use; set true only if you intentionally want to wipe and recreate the SQLite DB.
       RECREATE_DB_ON_STARTUP: "false"
-      CORS_ORIGINS: http://localhost:3000
+      # For production, set CORS_ORIGINS to your deployed frontend origin (or use same-origin via a reverse proxy).
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       # Free-tier Gemini config is sourced from ../.env (only manual step is pasting GEMINI_API_KEY there)
+      # Temporary: disable login/JWT checks for internal demo/iframe embedding
+      DISABLE_AUTH: ${DISABLE_AUTH:-true}
     volumes:
       - ../data:/app/data
       # Also mount the env file so python-dotenv inside the container can read it
@@ -37,7 +40,10 @@ services:
       context: ..
       dockerfile: deployment/Dockerfile.frontend
       args:
-        VITE_API_BASE_URL: http://localhost:8000
+        # IMPORTANT: This value is baked into the frontend bundle at build time.
+        # For local dev it's localhost; for a server deployment set VITE_API_BASE_URL to your backend public URL
+        # (or a same-origin proxy path like /api).
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
       - "3000:80"
     depends_on:

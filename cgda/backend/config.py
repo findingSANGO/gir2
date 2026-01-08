@@ -33,6 +33,10 @@ class Settings:
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
     jwt_exp_minutes: int = int(os.getenv("JWT_EXP_MINUTES", "480"))
 
+    # Auth toggle (temporary): set true to bypass login/JWT checks and allow all API access.
+    # Intended for internal demos / iframe embedding during early integration.
+    disable_auth: bool = os.getenv("DISABLE_AUTH", "true").lower() in ("1", "true", "yes")
+
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
 
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./cgda.db")

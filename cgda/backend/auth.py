@@ -12,7 +12,8 @@ from passlib.context import CryptContext
 from config import settings
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+# When auth is disabled, allow requests with no Authorization header (no 401 pre-check).
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=not settings.disable_auth)
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,12 @@ def decode_token(token: str) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from e
 
 
-def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+def get_current_user(token: Annotated[str | None, Depends(oauth2_scheme)]) -> User:
+    if settings.disable_auth:
+        # Default role used throughout the app for read-only dashboards
+        return User(username="public", role="commissioner")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return decode_token(token)
 
 

@@ -16,6 +16,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
@@ -526,12 +527,8 @@ export default function IssueIntelligence2() {
                 <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{overviewError}</div>
               ) : (
                 <LineCard
-                  title="Grievances over time (daily)"
-                  subtitle={
-                    showClosedLine
-                      ? "Created vs Closed (closed line shown when coverage is sufficient)"
-                      : `Created (closed line hidden due to low coverage: ${overviewData?.totals?.closed_coverage?.pct ?? 0}%)`
-                  }
+                  title="Grievances Over Time"
+                  subtitle="Created vs Closed"
                   data={trend}
                   xKey="day"
                   lines={[
@@ -546,12 +543,11 @@ export default function IssueIntelligence2() {
               <div className="rounded-2xl bg-white ring-1 ring-slateink-100 overflow-hidden">
                 <div className="px-5 py-4 border-b border-slateink-100 flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-xl font-semibold text-slateink-900">Closure Timeliness (SLA) Snapshot</div>
+                    <div className="text-xl font-semibold text-slateink-900">Closure Timeliness (SLA)</div>
                     <div className="mt-1 text-sm text-slateink-500">
-                      Based on tickets with valid close_date (N = {slaN.toLocaleString()})
+                      <span className="font-semibold text-slateink-700">Valid closures:</span> N = {slaN.toLocaleString()}
                     </div>
                   </div>
-                  <div className="text-xs font-semibold text-slateink-400">{sla?.as_of ? String(sla.as_of) : ""}</div>
                 </div>
 
                 <div className="p-5">
@@ -567,86 +563,71 @@ export default function IssueIntelligence2() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
                           <div className="text-xs font-semibold text-blue-700">MEDIAN RESOLUTION</div>
                           <div className="mt-2 flex items-baseline gap-2">
                             <div className="text-4xl font-semibold text-slateink-900">{fmt2(sla?.kpis?.median_days)}</div>
                             <div className="text-lg font-semibold text-slateink-500">days</div>
                           </div>
-                          <div className="mt-2 text-xs text-slateink-500">Typical turnaround time</div>
-                        </div>
-
-                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
-                          <div className="text-xs font-semibold text-indigo-700">P90 RESOLUTION</div>
-                          <div className="mt-2 flex items-baseline gap-2">
-                            <div className="text-4xl font-semibold text-slateink-900">{fmt2(sla?.kpis?.p90_days)}</div>
-                            <div className="text-lg font-semibold text-slateink-500">days</div>
-                          </div>
-                          <div className="mt-2 text-xs text-slateink-500">Upper limit for 90% of cases</div>
                         </div>
 
                         <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card border-b-4 border-emerald-500">
                           <div className="text-xs font-semibold text-emerald-700">WITHIN 1 DAY</div>
                           <div className="mt-2 text-4xl font-semibold text-slateink-900">{fmtPct(sla?.kpis?.within_1d_pct)}</div>
-                          <div className="mt-2 text-xs text-slateink-500">Immediate closures</div>
                         </div>
 
                         <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
                           <div className="text-xs font-semibold text-slateink-900">WITHIN 7 DAYS</div>
                           <div className="mt-2 text-4xl font-semibold text-slateink-900">{fmtPct(sla?.kpis?.within_7d_pct)}</div>
-                          <div className="mt-2 text-xs text-slateink-500">Standard SLA target</div>
                         </div>
 
                         <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
                           <div className="text-xs font-semibold text-rose-700">&gt; 30 DAYS</div>
                           <div className="mt-2 text-4xl font-semibold text-rose-600">{fmtPct(sla?.kpis?.over_30d_pct)}</div>
-                          <div className="mt-2 text-xs text-rose-600">Long-tail risk</div>
                         </div>
                       </div>
 
                       <div className="mt-4 rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
                         <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
                           <div className="text-lg font-semibold text-slateink-900">Resolution Time Distribution (Days)</div>
-                          <div className="flex items-center gap-5 text-xs font-semibold text-slateink-600">
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-3 w-3 rounded bg-blue-600" />
-                              Standard Flow
-                            </span>
-                            <span className="inline-flex items-center gap-2">
-                              <span className="h-3 w-3 rounded bg-rose-500" />
-                              Long Tail Risk
-                            </span>
-                          </div>
                         </div>
                         <div className="p-4">
                           <div className="h-[260px]">
                             <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={distRows} margin={{ top: 10, right: 16, bottom: 10, left: 8 }}>
+                              <BarChart data={distRows} margin={{ top: 10, right: 16, bottom: 34, left: 8 }}>
                                 <CartesianGrid strokeDasharray="2 10" stroke="#eceef2" vertical={false} />
                                 <XAxis
                                   dataKey="bucket"
+                                  height={44}
                                   tick={{ fontSize: 12, fill: "#64748b" }}
+                                  tickMargin={10}
                                   axisLine={false}
                                   tickLine={false}
                                   interval={0}
+                                  label={{ value: "Time taken to resolve", position: "bottom", offset: 18, fill: "#94a3b8", fontSize: 11 }}
                                 />
                                 <YAxis
                                   tick={{ fontSize: 12, fill: "#64748b" }}
                                   axisLine={false}
                                   tickLine={false}
-                                  domain={[0, (max) => Math.ceil((Number(max || 0) + 1) / 5) * 5]}
+                                  domain={[0, 50]}
+                                  ticks={[0, 10, 20, 30, 40, 50]}
                                   tickFormatter={(v) => `${v}%`}
                                 />
                                 <Tooltip formatter={(v) => `${Number(v || 0).toFixed(2)}%`} />
                                 <Bar dataKey="pct" radius={[10, 10, 4, 4]} maxBarSize={72}>
-                                  {(distRows || []).map((r, idx) => (
-                                    <Cell
-                                      key={idx}
-                                      fill={r.band === "long_tail" ? "#fb7185" : "#2563eb"}
-                                      opacity={r.band === "long_tail" ? 0.95 : 0.9}
-                                    />
+                                  {(distRows || []).map((_, idx) => (
+                                    <Cell key={idx} fill="#2563eb" opacity={0.9} />
                                   ))}
+                                  <LabelList
+                                    dataKey="pct"
+                                    position="center"
+                                    fill="#ffffff"
+                                    fontSize={12}
+                                    fontWeight={700}
+                                    formatter={(v) => `${Math.round(Number(v || 0))}%`}
+                                  />
                                 </Bar>
                               </BarChart>
                             </ResponsiveContainer>

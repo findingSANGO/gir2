@@ -1,5 +1,5 @@
 import React, { createContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import Navbar from "./components/Navbar.jsx";
 import Filters from "./components/Filters.jsx";
@@ -26,13 +26,6 @@ function clearAuth() {
   localStorage.removeItem("cgda_role");
   localStorage.removeItem("cgda_dataset_loaded");
   localStorage.removeItem("cgda_dataset_source");
-}
-
-function Protected({ children }) {
-  const { token } = getAuth();
-  const location = useLocation();
-  if (!token) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  return children;
 }
 
 export const FiltersContext = createContext({ filters: {}, setFilters: () => {} });
@@ -138,17 +131,16 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        {/* Auth disabled: keep /login for compatibility but redirect to landing */}
+        <Route path="/login" element={<Navigate to="/" replace />} />
 
         {/* Make Deep Dive the landing page */}
         <Route
           path="/"
           element={
-            <Protected>
-              <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
-                <IssueIntelligence2 />
-              </Shell>
-            </Protected>
+            <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
+              <IssueIntelligence2 />
+            </Shell>
           }
         />
 
@@ -156,71 +148,57 @@ export default function App() {
         <Route
           path="/executive"
           element={
-            <Protected>
-              <Shell title="Executive Overview" minimalChrome>
-                <Dashboard />
-              </Shell>
-            </Protected>
+            <Shell title="Executive Overview" minimalChrome>
+              <Dashboard />
+            </Shell>
           }
         />
         <Route
           path="/datasets"
           element={
-            <Protected>
-              <Shell title="Datasets" minimalChrome>
-                <Datasets />
-              </Shell>
-            </Protected>
+            <Shell title="Datasets" minimalChrome>
+              <Datasets />
+            </Shell>
           }
         />
         <Route
           path="/issue-intelligence"
           element={
-            <Protected>
-              <Shell title="Issue Intelligence" minimalChrome>
-                <IssueIntelligence />
-              </Shell>
-            </Protected>
+            <Shell title="Issue Intelligence" minimalChrome>
+              <IssueIntelligence />
+            </Shell>
           }
         />
         <Route
           path="/issue-intelligence2"
           element={
-            <Protected>
-              <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
-                <IssueIntelligence2 />
-              </Shell>
-            </Protected>
+            <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
+              <IssueIntelligence2 />
+            </Shell>
           }
         />
         <Route
           path="/feedback-analytics"
           element={
-            <Protected>
-              <Shell title="Citizen Feedback Analytics" minimalChrome>
-                <FeedbackAnalytics />
-              </Shell>
-            </Protected>
+            <Shell title="Citizen Feedback Analytics" minimalChrome>
+              <FeedbackAnalytics />
+            </Shell>
           }
         />
         <Route
           path="/closure-analytics"
           element={
-            <Protected>
-              <Shell title="Closure Time Analytics" minimalChrome>
-                <ClosureAnalytics />
-              </Shell>
-            </Protected>
+            <Shell title="Closure Time Analytics" minimalChrome>
+              <ClosureAnalytics />
+            </Shell>
           }
         />
         <Route
           path="/predictive-analytics"
           element={
-            <Protected>
-              <Shell title="Predictive Analytics" minimalChrome>
-                <PredictiveAnalytics />
-              </Shell>
-            </Protected>
+            <Shell title="Predictive Analytics" minimalChrome>
+              <PredictiveAnalytics />
+            </Shell>
           }
         />
         <Route path="*" element={<Navigate to="/issue-intelligence2" replace />} />
