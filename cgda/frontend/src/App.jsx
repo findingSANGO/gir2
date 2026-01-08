@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Sidebar from "./components/Sidebar.jsx";
 import Navbar from "./components/Navbar.jsx";
@@ -37,11 +37,15 @@ function Protected({ children }) {
 
 export const FiltersContext = createContext({ filters: {}, setFilters: () => {} });
 
-function Shell({ title, children }) {
+function Shell({ title, children, filtersProps = null, minimalChrome = false }) {
   const user = useMemo(() => {
     const a = getAuth();
     return { username: a.username, role: a.role };
   }, []);
+
+  const navbarWrapRef = useRef(null);
+  const filtersWrapRef = useRef(null);
+  const [chromeHeights, setChromeHeights] = useState({ navbar: 64, filters: 64 });
 
   // Draft filters are edited in the UI; Applied filters are used for API calls (GO button).
   function daysAgo(n) {
@@ -69,23 +73,56 @@ function Shell({ title, children }) {
 
   // File-pipeline mode: always run on the configured default dataset source.
 
+  useLayoutEffect(() => {
+    const navbarEl = navbarWrapRef.current;
+    const filtersEl = filtersWrapRef.current;
+    if (!navbarEl || !filtersEl) return;
+
+    function measure() {
+      const navbar = navbarEl.getBoundingClientRect().height || 0;
+      const filters = filtersEl.getBoundingClientRect().height || 0;
+      setChromeHeights((prev) => {
+        // avoid unnecessary renders
+        if (Math.abs(prev.navbar - navbar) < 0.5 && Math.abs(prev.filters - filters) < 0.5) return prev;
+        return { navbar, filters };
+      });
+    }
+
+    measure();
+
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(navbarEl);
+    ro.observe(filtersEl);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slateink-50">
-      <Sidebar />
-      <div className="lg:pl-72">
+    <div
+      className="min-h-screen bg-slateink-50"
+      style={{
+        "--cgda-navbar-h": `${chromeHeights.navbar}px`,
+        "--cgda-chrome-h": `${chromeHeights.navbar + chromeHeights.filters}px`
+      }}
+    >
+      {!minimalChrome && <Sidebar />}
+      <div className={minimalChrome ? "" : "lg:pl-72"}>
         <Navbar
+          ref={navbarWrapRef}
           title={title}
           user={user}
+          showUserControls={!minimalChrome}
           onLogout={() => {
             clearAuth();
             window.location.href = "/login";
           }}
         />
         <Filters
+          ref={filtersWrapRef}
           filters={draftFilters}
           setFilters={setDraftFilters}
           onApply={(next) => setFilters(next || draftFilters)}
           showDataset={false}
+          {...(filtersProps || {})}
         />
         <main className="mx-auto max-w-7xl px-4 lg:px-6 py-6">
           <FiltersContext.Provider value={{ filters, draftFilters, setDraftFilters, applyFilters: () => setFilters(draftFilters) }}>
@@ -103,11 +140,24 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
 
+        {/* Make Deep Dive the landing page */}
         <Route
           path="/"
           element={
             <Protected>
-              <Shell title="Executive Overview">
+              <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
+                <IssueIntelligence2 />
+              </Shell>
+            </Protected>
+          }
+        />
+
+        {/* Keep Executive Overview accessible (hidden from landing) */}
+        <Route
+          path="/executive"
+          element={
+            <Protected>
+              <Shell title="Executive Overview" minimalChrome>
                 <Dashboard />
               </Shell>
             </Protected>
@@ -117,7 +167,7 @@ export default function App() {
           path="/datasets"
           element={
             <Protected>
-              <Shell title="Datasets">
+              <Shell title="Datasets" minimalChrome>
                 <Datasets />
               </Shell>
             </Protected>
@@ -127,7 +177,7 @@ export default function App() {
           path="/issue-intelligence"
           element={
             <Protected>
-              <Shell title="Issue Intelligence">
+              <Shell title="Issue Intelligence" minimalChrome>
                 <IssueIntelligence />
               </Shell>
             </Protected>
@@ -137,7 +187,7 @@ export default function App() {
           path="/issue-intelligence2"
           element={
             <Protected>
-              <Shell title="Issue Intelligence 2">
+              <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
                 <IssueIntelligence2 />
               </Shell>
             </Protected>
@@ -147,7 +197,7 @@ export default function App() {
           path="/feedback-analytics"
           element={
             <Protected>
-              <Shell title="Citizen Feedback Analytics">
+              <Shell title="Citizen Feedback Analytics" minimalChrome>
                 <FeedbackAnalytics />
               </Shell>
             </Protected>
@@ -157,7 +207,7 @@ export default function App() {
           path="/closure-analytics"
           element={
             <Protected>
-              <Shell title="Closure Time Analytics">
+              <Shell title="Closure Time Analytics" minimalChrome>
                 <ClosureAnalytics />
               </Shell>
             </Protected>
@@ -167,13 +217,13 @@ export default function App() {
           path="/predictive-analytics"
           element={
             <Protected>
-              <Shell title="Predictive Analytics">
+              <Shell title="Predictive Analytics" minimalChrome>
                 <PredictiveAnalytics />
               </Shell>
             </Protected>
           }
         />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/issue-intelligence2" replace />} />
       </Routes>
     </>
   );

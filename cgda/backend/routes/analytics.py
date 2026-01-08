@@ -280,6 +280,63 @@ def closure(
     return _svc().closure(db, f)
 
 
+@router.get("/closure_sla_snapshot")
+def closure_sla_snapshot(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    db: Session = Depends(get_db),
+    start_date: str | None = None,
+    end_date: str | None = None,
+    wards: str | None = None,
+    department: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+):
+    """
+    Dedicated Closure Timeliness (SLA) snapshot for Issue Intelligence 2 → Overview.
+    Uses grievances_processed only. No Gemini calls.
+    """
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
+    return _svc().closure_sla_snapshot(db, f)
+
+
+@router.get("/forwarding_snapshot")
+def forwarding_snapshot(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    db: Session = Depends(get_db),
+    start_date: str | None = None,
+    end_date: str | None = None,
+    wards: str | None = None,
+    department: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+):
+    """
+    Dedicated Forwarding Analytics snapshot for Issue Intelligence 2 → Overview.
+    Uses grievances_processed only. No Gemini calls.
+    """
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
+    return _svc().forwarding_snapshot(db, f)
+
+
+@router.get("/forwarding_impact_resolution")
+def forwarding_impact_resolution(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    db: Session = Depends(get_db),
+    start_date: str | None = None,
+    end_date: str | None = None,
+    wards: str | None = None,
+    department: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+):
+    """
+    Forwarding impact on resolution time ("process tax") comparison.
+    Dedicated endpoint for Issue Intelligence 2 → Overview.
+    """
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
+    return _svc().forwarding_impact_resolution(db, f)
+
+
 @router.get("/wordcloud")
 def wordcloud(
     _: Annotated[User, Depends(require_role("admin", "commissioner"))],

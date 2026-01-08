@@ -1,20 +1,21 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { VerticalBarCard } from "../components/Charts.jsx";
+import { LineCard, VerticalBarCard } from "../components/Charts.jsx";
 import { api } from "../services/api.js";
 import { FiltersContext } from "../App.jsx";
 import {
   BarChart3,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   Database,
-  ShieldCheck,
   TriangleAlert,
   AlertTriangle,
   ListOrdered
 } from "lucide-react";
 import { Card, CardContent } from "../components/ui/Card.jsx";
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
@@ -37,7 +38,9 @@ function fmtRange(startISO, endISO) {
 
 function SlideTabs({ slides, active, onChange }) {
   return (
-    <div className="flex items-center gap-2 overflow-auto">
+    // Important: overflow-x for scroll is fine, but overflow-y must remain visible
+    // otherwise Tailwind `ring-*` (box-shadow) gets clipped and pills look “cut off”.
+    <div className="flex items-center gap-2 overflow-x-auto overflow-y-visible py-1 pr-1 -my-1">
       {slides.map((s, idx) => {
         const isActive = idx === active;
         return (
@@ -47,7 +50,9 @@ function SlideTabs({ slides, active, onChange }) {
             onClick={() => onChange(idx)}
             className={
               "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition " +
-              (isActive ? "bg-white text-slateink-900 ring-white" : "bg-white/10 text-white ring-white/15 hover:bg-white/15")
+              (isActive
+                ? "bg-slateink-900 text-white ring-slateink-900"
+                : "bg-white text-slateink-700 ring-slateink-200 hover:bg-slateink-50 hover:ring-slateink-300")
             }
           >
             {s.label}
@@ -207,12 +212,32 @@ function PainTooltip({ active, payload }) {
   );
 }
 
+function niceAxisMaxDays(v) {
+  // Goal: dynamic scaling, but avoid huge empty space when max is ~6–7 days.
+  // Keep a minimum visible scale of 10 days (as typical median is around ~7).
+  const raw = Number(v || 0);
+  const padded = raw > 0 ? raw * 1.15 : 0; // light headroom
+  const base = Math.max(10, padded);
+
+  // "Nice" rounding: 0–20 by 5s, 20–60 by 10s, above by 20s.
+  const step = base <= 20 ? 5 : base <= 60 ? 10 : 20;
+  return Math.max(10, Math.ceil(base / step) * step);
+}
+
 export default function IssueIntelligence2() {
   const { filters } = useContext(FiltersContext);
   const [payload, setPayload] = useState(null);
+  const [overviewData, setOverviewData] = useState(null);
+  const [sla, setSla] = useState(null);
+  const [fwd, setFwd] = useState(null);
+  const [fwdImpact, setFwdImpact] = useState(null);
   const [slide, setSlide] = useState(0);
   const [metric, setMetric] = useState("volume"); // volume | priority
   const [error, setError] = useState("");
+  const [overviewError, setOverviewError] = useState("");
+  const [slaError, setSlaError] = useState("");
+  const [fwdError, setFwdError] = useState("");
+  const [fwdImpactError, setFwdImpactError] = useState("");
   const [hoverSubtopic, setHoverSubtopic] = useState("");
 
   useEffect(() => {
@@ -226,6 +251,118 @@ export default function IssueIntelligence2() {
         setPayload(res);
       } catch (e) {
         if (!cancelled) setError(e.message || "Failed to load Issue Intelligence");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filters.start_date,
+    filters.end_date,
+    (filters.wards || []).join(","),
+    filters.department,
+    filters.category,
+    filters.source
+  ]);
+
+  // Pull in Executive Overview time-series (reuse the same chart on Issue Intelligence 2 → Overview)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setOverviewError("");
+        const res = await api.executiveOverviewV2({ ...filters });
+        if (cancelled) return;
+        setOverviewData(res);
+      } catch (e) {
+        if (cancelled) return;
+        setOverviewData(null);
+        setOverviewError(e.message || "Failed to load overview time series");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filters.start_date,
+    filters.end_date,
+    (filters.wards || []).join(","),
+    filters.department,
+    filters.category,
+    filters.source
+  ]);
+
+  // Dedicated SLA Snapshot widget
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setSlaError("");
+        const res = await api.closureSlaSnapshot({ ...filters });
+        if (cancelled) return;
+        setSla(res);
+      } catch (e) {
+        if (cancelled) return;
+        setSla(null);
+        setSlaError(e.message || "Failed to load SLA snapshot");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filters.start_date,
+    filters.end_date,
+    (filters.wards || []).join(","),
+    filters.department,
+    filters.category,
+    filters.source
+  ]);
+
+  // Dedicated Forwarding Analytics widget
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setFwdError("");
+        const res = await api.forwardingSnapshot({ ...filters });
+        if (cancelled) return;
+        setFwd(res);
+      } catch (e) {
+        if (cancelled) return;
+        setFwd(null);
+        setFwdError(e.message || "Failed to load forwarding snapshot");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    filters.start_date,
+    filters.end_date,
+    (filters.wards || []).join(","),
+    filters.department,
+    filters.category,
+    filters.source
+  ]);
+
+  // Forwarding impact on resolution time (process tax)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setFwdImpactError("");
+        const res = await api.forwardingImpactResolution({ ...filters });
+        if (cancelled) return;
+        setFwdImpact(res);
+      } catch (e) {
+        if (cancelled) return;
+        setFwdImpact(null);
+        setFwdImpactError(e.message || "Failed to load forwarding impact");
       }
     })();
     return () => {
@@ -258,30 +395,7 @@ export default function IssueIntelligence2() {
     { key: "week", label: "This Week" }
   ];
 
-  function prev() {
-    setSlide((s) => Math.max(0, s - 1));
-  }
-  function next() {
-    setSlide((s) => Math.min(slides.length - 1, s + 1));
-  }
-
-  // Keyboard navigation: ← / → to move between slides
-  useEffect(() => {
-    function onKeyDown(e) {
-      const tag = String(e?.target?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "ArrowRight") next();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const periodLabel = fmtRange(filters?.start_date, filters?.end_date);
-  const scope = `Ward: ${(filters?.wards || []).length ? `${filters.wards.length} selected` : "All"}  •  Dept: ${
-    filters?.department || "All"
-  }  •  Cat: ${filters?.category || "All"}`;
 
   const readiness = payload?.readiness || null;
   const load = payload?.load_view || {};
@@ -310,6 +424,22 @@ export default function IssueIntelligence2() {
     return [...painPointsRaw].sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
   }, [painPointsRaw]);
 
+  const painXMax = useMemo(() => {
+    const xs = (painPoints || [])
+      .map((p) => Number(p?.median_sla_days))
+      .filter((n) => Number.isFinite(n) && n >= 0);
+    const mx = xs.length ? Math.max(...xs) : 0;
+    return niceAxisMaxDays(mx);
+  }, [painPoints]);
+
+  const painXTicks = useMemo(() => {
+    const max = Number(painXMax || 10);
+    const step = max <= 20 ? 5 : max <= 60 ? 10 : 20;
+    const out = [];
+    for (let x = 0; x <= max + 1e-9; x += step) out.push(Number(x.toFixed(6)));
+    return out;
+  }, [painXMax]);
+
   const painHigh = useMemo(() => painPoints.filter((p) => String(p.urgency || "").toLowerCase().startsWith("high")), [painPoints]);
   const painMed = useMemo(() => painPoints.filter((p) => String(p.urgency || "").toLowerCase().startsWith("med")), [painPoints]);
   const painLow = useMemo(() => painPoints.filter((p) => !String(p.urgency || "").toLowerCase().match(/^(high|med)/)), [painPoints]);
@@ -321,56 +451,66 @@ export default function IssueIntelligence2() {
     return m;
   }, [painPoints]);
 
+  const trend = useMemo(() => {
+    const pts = overviewData?.time_series_daily?.rows || [];
+    return pts.slice(Math.max(0, pts.length - 45)).map((r) => ({ day: r.day, created: r.created, closed: r.closed }));
+  }, [overviewData]);
+
+  const showClosedLine = Boolean(overviewData?.time_series_daily?.show_closed);
+
+  const slaN = Number(sla?.based_on?.closed_n || 0);
+  const dist = sla?.distribution?.rows || [];
+  const distRows = useMemo(() => {
+    return (dist || []).map((r) => ({
+      bucket: r.bucket,
+      pct: Number(r.pct || 0),
+      band: r.band || "standard"
+    }));
+  }, [dist]);
+
+  const fwdTotal = Number(fwd?.based_on?.total_n || 0);
+  const fwdN = Number(fwd?.based_on?.forwarded_n || 0);
+  const hopRows = useMemo(() => {
+    return (fwd?.distribution?.hops || []).map((r) => ({
+      bucket: r.bucket,
+      count: Number(r.count || 0),
+      band: r.band || "standard"
+    }));
+  }, [fwd]);
+
+  const impactClosedN = Number(fwdImpact?.based_on?.closed_n || 0);
+  const directDist = useMemo(() => {
+    return (fwdImpact?.direct?.distribution || []).map((r) => ({ bucket: r.bucket, pct: Number(r.pct || 0) }));
+  }, [fwdImpact]);
+  const forwardedDist = useMemo(() => {
+    return (fwdImpact?.forwarded?.distribution || []).map((r) => ({ bucket: r.bucket, pct: Number(r.pct || 0) }));
+  }, [fwdImpact]);
+
+  function fmt2(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return n.toFixed(2);
+  }
+  function fmtPct(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return `${n.toFixed(2)}%`;
+  }
+  function fmtPct0(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "—";
+    return `${Math.round(n)}%`;
+  }
+
   return (
     <div className="space-y-5">
-      {/* Slide navigation header (inside Issue Intelligence section) */}
-      <div className="rounded-2xl bg-gradient-to-br from-slateink-950 via-slateink-900 to-indigo-950 ring-1 ring-slateink-900/30 overflow-hidden">
-        <div className="px-5 py-5">
-          <div className="flex items-center gap-2 text-xs font-semibold text-white/70">
-            <span className="rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1">DASHBOARD</span>
-            <span className="text-white/50">GRIEVANCE ANALYTICS 2025</span>
-          </div>
-          <div className="mt-2 text-3xl font-semibold text-white">Issue Intelligence 2</div>
-          <div className="mt-1 text-sm text-white/70">What’s driving problems + where to act</div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <SlideTabs slides={slides} active={slide} onChange={setSlide} />
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={prev}
-                disabled={slide === 0}
-                className="h-10 w-10 rounded-xl bg-white/10 ring-1 ring-white/15 text-white disabled:opacity-40 hover:bg-white/15 flex items-center justify-center"
-                title="Previous slide"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={next}
-                disabled={slide === slides.length - 1}
-                className="h-10 w-10 rounded-xl bg-white/10 ring-1 ring-white/15 text-white disabled:opacity-40 hover:bg-white/15 flex items-center justify-center"
-                title="Next slide"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white">
-          <div className="px-5 py-3 flex flex-wrap items-center gap-3 text-xs">
-            <div className="inline-flex items-center gap-2 text-slateink-700">
-              <span className="font-semibold text-slateink-900">PERIOD</span>
-              <span className="rounded-full bg-slateink-50 ring-1 ring-slateink-200 px-3 py-1">{periodLabel}</span>
-            </div>
-            <div className="h-6 w-px bg-slateink-200" />
-            <div className="inline-flex items-center gap-2 text-slateink-700">
-              <span className="font-semibold text-slateink-900">SCOPE FILTERS</span>
-              <span className="rounded-full bg-slateink-50 ring-1 ring-slateink-200 px-3 py-1">{scope}</span>
-            </div>
-            <div className="ml-auto text-[11px] font-semibold text-slateink-400">CONFIDENTIAL • REPORT</div>
-          </div>
+      {/* Navigation pills (global filter bar is above this page in Shell) */}
+      <div
+        className="sticky z-30 bg-slateink-50/80 backdrop-blur border-b border-slateink-100 -mx-4 lg:-mx-6 px-4 lg:px-6 py-1.5"
+        style={{ top: "calc(var(--cgda-chrome-h, 128px) + 1px)" }}
+      >
+        <div className="flex items-center">
+          <SlideTabs slides={slides} active={slide} onChange={setSlide} />
         </div>
       </div>
 
@@ -379,69 +519,427 @@ export default function IssueIntelligence2() {
         <div className="p-5">
           {/* Slide 1 */}
           {slide === 0 ? (
-            <div className="grid gap-5 lg:grid-cols-12">
-              <div className="lg:col-span-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slateink-900">
-                  <Database className="h-4 w-4 text-gov-700" />
-                  Data Readiness
-                </div>
-                <div className="mt-4 space-y-5">
-                  <ProgressRow label="AI Coverage" pct={readiness?.ai?.pct} subtitle="Enrichment success rate" />
-                  <ProgressRow label="Close Date Coverage" pct={readiness?.close_date?.pct} subtitle="Timestamps validity" />
-                  <ProgressRow label="Rating Coverage" pct={readiness?.rating?.pct} subtitle="Citizen feedback received" />
-                </div>
-                <div className="mt-5 rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3 text-xs text-slateink-600">
-                  High data readiness allows for confident segmentation of issues by urgency and SLA risk.
-                </div>
-              </div>
+            <div className="space-y-5">
+              {/* Removed (per request): Data Readiness + Dashboard Purpose panels */}
 
-              <div className="lg:col-span-8">
-                <div className="flex items-center gap-2 text-sm font-semibold text-slateink-900">
-                  <ShieldCheck className="h-4 w-4 text-indigo-700" />
-                  Dashboard Purpose
+              {overviewError ? (
+                <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{overviewError}</div>
+              ) : (
+                <LineCard
+                  title="Grievances over time (daily)"
+                  subtitle={
+                    showClosedLine
+                      ? "Created vs Closed (closed line shown when coverage is sufficient)"
+                      : `Created (closed line hidden due to low coverage: ${overviewData?.totals?.closed_coverage?.pct ?? 0}%)`
+                  }
+                  data={trend}
+                  xKey="day"
+                  lines={[
+                    { key: "created", name: "Created", color: "#2b54f6" },
+                    ...(showClosedLine ? [{ key: "closed", name: "Closed", color: "#16a34a" }] : [])
+                  ]}
+                  height={320}
+                  showLegend
+                />
+              )}
+
+              <div className="rounded-2xl bg-white ring-1 ring-slateink-100 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slateink-100 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xl font-semibold text-slateink-900">Closure Timeliness (SLA) Snapshot</div>
+                    <div className="mt-1 text-sm text-slateink-500">
+                      Based on tickets with valid close_date (N = {slaN.toLocaleString()})
+                    </div>
+                  </div>
+                  <div className="text-xs font-semibold text-slateink-400">{sla?.as_of ? String(sla.as_of) : ""}</div>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {[
-                    {
-                      icon: BarChart3,
-                      title: "Identify Top Issues",
-                      desc: "Pinpoint highest volume categories driving citizen complaints.",
-                      tone: "bg-slateink-50 ring-slateink-100"
-                    },
-                    {
-                      icon: TriangleAlert,
-                      title: "Identify Painful Issues",
-                      desc: "Spot problems that are slow to resolve, low-rated, and highly urgent.",
-                      tone: "bg-rose-50 ring-rose-100"
-                    },
-                    {
-                      icon: Database,
-                      title: "Identify Hotspots",
-                      desc: "Locate specific infrastructure entities or geographic zones causing failures.",
-                      tone: "bg-indigo-50 ring-indigo-100"
-                    },
-                    {
-                      icon: ClipboardList,
-                      title: "Produce Priorities",
-                      desc: "Generate actionable task lists for Ward and Department owners.",
-                      tone: "bg-emerald-50 ring-emerald-100"
-                    }
-                  ].map((x) => {
-                    const Icon = x.icon;
-                    return (
-                      <div key={x.title} className={`rounded-2xl ring-1 p-4 ${x.tone}`}>
-                        <div className="flex items-start gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-white ring-1 ring-slateink-100 flex items-center justify-center">
-                            <Icon className="h-4 w-4 text-slateink-700" />
+
+                <div className="p-5">
+                  {slaError ? (
+                    <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{slaError}</div>
+                  ) : !sla ? (
+                    <div className="rounded-xl border border-dashed border-slateink-200 bg-white/40 px-4 py-10 text-center text-sm text-slateink-500">
+                      Loading…
+                    </div>
+                  ) : slaN <= 0 ? (
+                    <div className="rounded-xl border border-dashed border-slateink-200 bg-white/40 px-4 py-10 text-center text-sm text-slateink-500">
+                      No closure data for this selection (needs valid close_date).
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-blue-700">MEDIAN RESOLUTION</div>
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <div className="text-4xl font-semibold text-slateink-900">{fmt2(sla?.kpis?.median_days)}</div>
+                            <div className="text-lg font-semibold text-slateink-500">days</div>
                           </div>
-                          <div>
-                            <div className="text-sm font-semibold text-slateink-900">{x.title}</div>
-                            <div className="mt-1 text-xs text-slateink-600">{x.desc}</div>
+                          <div className="mt-2 text-xs text-slateink-500">Typical turnaround time</div>
+                        </div>
+
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-indigo-700">P90 RESOLUTION</div>
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <div className="text-4xl font-semibold text-slateink-900">{fmt2(sla?.kpis?.p90_days)}</div>
+                            <div className="text-lg font-semibold text-slateink-500">days</div>
+                          </div>
+                          <div className="mt-2 text-xs text-slateink-500">Upper limit for 90% of cases</div>
+                        </div>
+
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card border-b-4 border-emerald-500">
+                          <div className="text-xs font-semibold text-emerald-700">WITHIN 1 DAY</div>
+                          <div className="mt-2 text-4xl font-semibold text-slateink-900">{fmtPct(sla?.kpis?.within_1d_pct)}</div>
+                          <div className="mt-2 text-xs text-slateink-500">Immediate closures</div>
+                        </div>
+
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-slateink-900">WITHIN 7 DAYS</div>
+                          <div className="mt-2 text-4xl font-semibold text-slateink-900">{fmtPct(sla?.kpis?.within_7d_pct)}</div>
+                          <div className="mt-2 text-xs text-slateink-500">Standard SLA target</div>
+                        </div>
+
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-rose-700">&gt; 30 DAYS</div>
+                          <div className="mt-2 text-4xl font-semibold text-rose-600">{fmtPct(sla?.kpis?.over_30d_pct)}</div>
+                          <div className="mt-2 text-xs text-rose-600">Long-tail risk</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
+                          <div className="text-lg font-semibold text-slateink-900">Resolution Time Distribution (Days)</div>
+                          <div className="flex items-center gap-5 text-xs font-semibold text-slateink-600">
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-3 w-3 rounded bg-blue-600" />
+                              Standard Flow
+                            </span>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-3 w-3 rounded bg-rose-500" />
+                              Long Tail Risk
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <div className="h-[260px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={distRows} margin={{ top: 10, right: 16, bottom: 10, left: 8 }}>
+                                <CartesianGrid strokeDasharray="2 10" stroke="#eceef2" vertical={false} />
+                                <XAxis
+                                  dataKey="bucket"
+                                  tick={{ fontSize: 12, fill: "#64748b" }}
+                                  axisLine={false}
+                                  tickLine={false}
+                                  interval={0}
+                                />
+                                <YAxis
+                                  tick={{ fontSize: 12, fill: "#64748b" }}
+                                  axisLine={false}
+                                  tickLine={false}
+                                  domain={[0, (max) => Math.ceil((Number(max || 0) + 1) / 5) * 5]}
+                                  tickFormatter={(v) => `${v}%`}
+                                />
+                                <Tooltip formatter={(v) => `${Number(v || 0).toFixed(2)}%`} />
+                                <Bar dataKey="pct" radius={[10, 10, 4, 4]} maxBarSize={72}>
+                                  {(distRows || []).map((r, idx) => (
+                                    <Cell
+                                      key={idx}
+                                      fill={r.band === "long_tail" ? "#fb7185" : "#2563eb"}
+                                      opacity={r.band === "long_tail" ? 0.95 : 0.9}
+                                    />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white ring-1 ring-slateink-100 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slateink-100 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xl font-semibold text-slateink-900">Forwarding Analytics</div>
+                    <div className="mt-1 text-sm text-slateink-500">Operational friction &amp; routing efficiency</div>
+                  </div>
+                  <div className="text-xs font-semibold text-slateink-400">{fwd?.as_of ? String(fwd.as_of) : ""}</div>
+                </div>
+
+                <div className="p-5">
+                  {fwdError ? (
+                    <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{fwdError}</div>
+                  ) : !fwd ? (
+                    <div className="rounded-xl border border-dashed border-slateink-200 bg-white/40 px-4 py-10 text-center text-sm text-slateink-500">
+                      Loading…
+                    </div>
+                  ) : fwdTotal <= 0 ? (
+                    <div className="rounded-xl border border-dashed border-slateink-200 bg-white/40 px-4 py-10 text-center text-sm text-slateink-500">
+                      No records for this selection.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 lg:grid-cols-3">
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-blue-700">TICKETS FORWARDED</div>
+                          <div className="mt-2 text-4xl font-semibold text-slateink-900">
+                            {fmtPct(fwd?.kpis?.forwarded_pct)}{" "}
+                            <span className="text-base font-semibold text-slateink-400">of total volume</span>
+                          </div>
+                          <div className="mt-2 text-xs text-slateink-500">Routing intervention required</div>
+                        </div>
+
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-slateink-900">MEDIAN FORWARD DELAY</div>
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwd?.kpis?.median_forward_delay_days)}</div>
+                            <div className="text-lg font-semibold text-slateink-500">days</div>
+                          </div>
+                          <div className="mt-2 text-xs text-slateink-500">Time lost before reaching owner</div>
+                        </div>
+
+                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
+                          <div className="text-xs font-semibold text-rose-700">P90 FORWARD DELAY</div>
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwd?.kpis?.p90_forward_delay_days)}</div>
+                            <div className="text-lg font-semibold text-slateink-500">days</div>
+                          </div>
+                          <div className="mt-2 text-xs text-slateink-500">Severe routing bottleneck cases</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-12">
+                        <div className="lg:col-span-8 rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                          <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
+                            <div className="text-lg font-semibold text-slateink-900">Forwarding Events Distribution</div>
+                            <div className="text-xs font-semibold text-slateink-500">
+                              Among forwarded tickets (n ≈ {fwdN.toLocaleString()})
+                            </div>
+                          </div>
+                          <div className="p-4">
+                            <div className="h-[260px]">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={hopRows} margin={{ top: 10, right: 16, bottom: 10, left: 8 }}>
+                                  <CartesianGrid strokeDasharray="2 10" stroke="#eceef2" vertical={false} />
+                                  <XAxis
+                                    dataKey="bucket"
+                                    tick={{ fontSize: 12, fill: "#64748b" }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    interval={0}
+                                  />
+                                  <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                                  <Tooltip />
+                                  <Bar dataKey="count" radius={[10, 10, 4, 4]} maxBarSize={90}>
+                                    {(hopRows || []).map((r, idx) => (
+                                      <Cell
+                                        key={idx}
+                                        fill={r.band === "confusion" ? "#ef4444" : r.band === "correction" ? "#6366f1" : "#93c5fd"}
+                                      />
+                                    ))}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="lg:col-span-4 rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                          <div className="px-5 py-4 border-b border-slateink-100 flex items-center gap-2">
+                            <div className="text-lg font-semibold text-slateink-900">Multiple Hops (Ping-Pong)</div>
+                          </div>
+                          <div className="p-5 space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="h-12 w-12 rounded-full bg-indigo-50 ring-1 ring-indigo-100 flex items-center justify-center text-indigo-700 font-semibold">
+                                  2+
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-slateink-900">Re-forwarded</div>
+                                  <div className="text-xs text-slateink-500">Tickets moved &gt;2 times</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-3xl font-semibold text-slateink-900">
+                                  {Number(fwd?.multiple_hops?.reforwarded_ge2 || 0).toLocaleString()}
+                                </div>
+                                <div className="text-xs font-semibold text-indigo-600">High Friction</div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="h-12 w-12 rounded-full bg-rose-50 ring-1 ring-rose-100 flex items-center justify-center text-rose-700 font-semibold">
+                                  3+
+                                </div>
+                                <div>
+                                  <div className="text-sm font-semibold text-slateink-900">Chronic Routing Issues</div>
+                                  <div className="text-xs text-slateink-500">Tickets moved &gt;3 times</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-3xl font-semibold text-slateink-900">
+                                  {Number(fwd?.multiple_hops?.chronic_ge3 || 0).toLocaleString()}
+                                </div>
+                                <div className="text-xs font-semibold text-rose-600">Critical Waste</div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 text-sm text-slateink-700 leading-relaxed">
+                              <span className="font-semibold">Insight:</span>{" "}
+                              {String(fwd?.insight || "").replace(/^Insight:\s*/i, "")}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-white ring-1 ring-slateink-100 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slateink-100 flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-xl font-semibold text-slateink-900">Forwarding Impact on Resolution Time</div>
+                    <div className="mt-1 text-sm text-slateink-500">The “process tax” analysis (tickets with close date)</div>
+                  </div>
+                  <div className="text-xs font-semibold text-slateink-400">{fwdImpact?.as_of ? String(fwdImpact.as_of) : ""}</div>
+                </div>
+
+                <div className="p-5">
+                  {fwdImpactError ? (
+                    <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{fwdImpactError}</div>
+                  ) : !fwdImpact ? (
+                    <div className="rounded-xl border border-dashed border-slateink-200 bg-white/40 px-4 py-10 text-center text-sm text-slateink-500">
+                      Loading…
+                    </div>
+                  ) : impactClosedN <= 0 ? (
+                    <div className="rounded-xl border border-dashed border-slateink-200 bg-white/40 px-4 py-10 text-center text-sm text-slateink-500">
+                      No closure data for this selection (needs valid close_date).
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 lg:grid-cols-2 relative">
+                      {/* Direct */}
+                      <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center">
+                              <span className="text-emerald-700 font-semibold">✓</span>
+                            </div>
+                            <div>
+                              <div className="text-lg font-semibold text-slateink-900">Direct Closure (Not Forwarded)</div>
+                              <div className="text-xs font-semibold text-slateink-500">Efficient Path</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-5">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">MEDIAN TIME</div>
+                              <div className="mt-2 flex items-baseline gap-2">
+                                <div className="text-4xl font-semibold text-emerald-700">{fmt2(fwdImpact?.direct?.median_days)}</div>
+                                <div className="text-lg font-semibold text-slateink-500">days</div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">MEAN TIME</div>
+                              <div className="mt-2 flex items-baseline gap-2">
+                                <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwdImpact?.direct?.mean_days)}</div>
+                                <div className="text-lg font-semibold text-slateink-500">days</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 text-sm font-semibold text-slateink-700">Resolution Time Distribution</div>
+                          <div className="mt-3 h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={directDist} margin={{ top: 6, right: 8, bottom: 6, left: 0 }}>
+                                <CartesianGrid strokeDasharray="2 10" stroke="#eceef2" vertical={false} />
+                                <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} interval={0} />
+                                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                                <Tooltip formatter={(v) => `${Number(v || 0).toFixed(2)}%`} />
+                                <Bar dataKey="pct" radius={[10, 10, 4, 4]} maxBarSize={56}>
+                                  {(directDist || []).map((_, idx) => (
+                                    <Cell key={idx} fill={idx <= 1 ? "#22c55e" : "#4ade80"} opacity={0.9} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* VS pill */}
+                      <div className="hidden lg:flex items-center justify-center absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                        <div className="h-12 w-12 rounded-full bg-white shadow-card ring-1 ring-slateink-200 flex items-center justify-center text-slateink-600 font-bold">
+                          VS
+                        </div>
+                      </div>
+
+                      {/* Forwarded */}
+                      <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-rose-50 ring-1 ring-rose-100 flex items-center justify-center">
+                              <span className="text-rose-700 font-semibold">✖</span>
+                            </div>
+                            <div>
+                              <div className="text-lg font-semibold text-slateink-900">Re-routed (Forwarded)</div>
+                              <div className="text-xs font-semibold text-slateink-500">High Friction</div>
+                            </div>
+                          </div>
+                          {fwdImpact?.comparison?.median_uplift_pct != null ? (
+                            <div className="rounded-lg bg-rose-50 ring-1 ring-rose-100 px-3 py-1 text-sm font-semibold text-rose-700">
+                              +{fmtPct0(fwdImpact?.comparison?.median_uplift_pct)} vs Direct
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="p-5">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">MEDIAN TIME</div>
+                              <div className="mt-2 flex items-baseline gap-2">
+                                <div className="text-4xl font-semibold text-rose-600">{fmt2(fwdImpact?.forwarded?.median_days)}</div>
+                                <div className="text-lg font-semibold text-slateink-500">days</div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">MEAN TIME</div>
+                              <div className="mt-2 flex items-baseline gap-2">
+                                <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwdImpact?.forwarded?.mean_days)}</div>
+                                <div className="text-lg font-semibold text-slateink-500">days</div>
+                              </div>
+                              {fwdImpact?.comparison?.heavy_tail ? (
+                                <div className="mt-2 text-sm font-semibold text-rose-500">Heavy Tail Impact</div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="mt-5 text-sm font-semibold text-slateink-700">Resolution Time Distribution</div>
+                          <div className="mt-3 h-[200px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={forwardedDist} margin={{ top: 6, right: 8, bottom: 6, left: 0 }}>
+                                <CartesianGrid strokeDasharray="2 10" stroke="#eceef2" vertical={false} />
+                                <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} interval={0} />
+                                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                                <Tooltip formatter={(v) => `${Number(v || 0).toFixed(2)}%`} />
+                                <Bar dataKey="pct" radius={[10, 10, 4, 4]} maxBarSize={56}>
+                                  {(forwardedDist || []).map((r, idx) => (
+                                    <Cell
+                                      key={idx}
+                                      fill={idx >= 2 ? "#ef4444" : "#fb7185"}
+                                      opacity={0.92}
+                                    />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -602,8 +1100,8 @@ export default function IssueIntelligence2() {
                                 tick={{ fontSize: 12, fill: "#64748b" }}
                                 axisLine={false}
                                 tickLine={false}
-                                tickCount={4}
-                                domain={[0, (max) => Math.ceil((Number(max || 0) + 5) / 10) * 10]}
+                                ticks={painXTicks}
+                                domain={[0, painXMax]}
                                 label={{
                                   value: "Median Resolution Time (Days)  •  Slower →",
                                   position: "insideBottomRight",
@@ -635,8 +1133,8 @@ export default function IssueIntelligence2() {
                               {/* Zone fills: use soft tint + very low opacity */}
                               <ReferenceArea x1={0} x2={painX} y1={0} y2={painY} fill={zoneFill("healthy")} fillOpacity={0.05} strokeOpacity={0} />
                               <ReferenceArea x1={0} x2={painX} y1={painY} y2={100} fill={zoneFill("fast_unhappy")} fillOpacity={0.05} strokeOpacity={0} />
-                              <ReferenceArea x1={painX} x2={9999} y1={0} y2={painY} fill={zoneFill("slow_ok")} fillOpacity={0.05} strokeOpacity={0} />
-                              <ReferenceArea x1={painX} x2={9999} y1={painY} y2={100} fill={zoneFill("priority")} fillOpacity={0.05} strokeOpacity={0} />
+                              <ReferenceArea x1={painX} x2={painXMax} y1={0} y2={painY} fill={zoneFill("slow_ok")} fillOpacity={0.05} strokeOpacity={0} />
+                              <ReferenceArea x1={painX} x2={painXMax} y1={painY} y2={100} fill={zoneFill("priority")} fillOpacity={0.05} strokeOpacity={0} />
                               {painX != null ? <ReferenceLine x={painX} stroke="#cbd5e1" strokeDasharray="6 6" /> : null}
                               {painY != null ? <ReferenceLine y={painY} stroke="#cbd5e1" strokeDasharray="6 6" /> : null}
 
@@ -670,8 +1168,8 @@ export default function IssueIntelligence2() {
                             </ScatterChart>
                           </ResponsiveContainer>
 
-                          {/* Quadrant labels */}
-                          <div className="pointer-events-none absolute inset-0 p-6 text-xs font-semibold text-slateink-500">
+                          {/* Quadrant labels (anchored to plot area, not the full container) */}
+                          <div className="pointer-events-none absolute top-6 bottom-6 right-6 left-[88px] text-xs font-semibold text-slateink-500">
                             <div className="absolute left-7 top-8">
                               <div className="text-[11px] tracking-wide text-slateink-400">FAST BUT UNHAPPY</div>
                               <div className="mt-1 text-xl font-semibold text-slateink-400/50">Quality Risk</div>

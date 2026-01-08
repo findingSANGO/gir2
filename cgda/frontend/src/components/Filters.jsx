@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "../services/api.js";
 import { Card } from "./ui/Card.jsx";
@@ -150,12 +150,14 @@ function startOfFYISO(anchorISO) {
   return fy.toISOString().slice(0, 10);
 }
 
-export default function Filters({ filters, setFilters, onApply, showDataset = true }) {
+const Filters = forwardRef(function Filters({ filters, setFilters, onApply, showDataset = true, showCategory = true }, ref) {
   const { pathname } = useLocation();
-  const isExecutive = pathname === "/" || pathname === "/new" || pathname === "/old";
+  // NOTE: "/" is now the Deep Dive landing page.
+  const isExecutive = pathname === "/executive";
+  const isDeepDive = pathname === "/" || pathname === "/issue-intelligence2";
 
   const [dims, setDims] = useState({ wards: [], departments: [], categories: [], datasets: [] });
-  const [preset, setPreset] = useState(isExecutive ? "yesterday" : "last30");
+  const [preset, setPreset] = useState(isExecutive ? "yesterday" : isDeepDive ? "tillDate" : "last30");
   const [customOpen, setCustomOpen] = useState(false);
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -164,13 +166,13 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
   const presets = useMemo(
     () => [
       { key: "yesterday", label: "Yesterday" },
-      { key: "today", label: "Today", start: todayISO(), end: todayISO() },
-      { key: "last7", label: "Last 7 days", start: daysAgoISO(6), end: todayISO() },
+      { key: "today", label: "Today" },
+      { key: "last7", label: "Last 7 days" },
       { key: "last14", label: "Last 14 days" },
-      { key: "last30", label: "Last 30 days", start: daysAgoISO(29), end: todayISO() },
+      { key: "last30", label: "Last 30 days" },
       { key: "tillDate", label: "Till Date" },
-      { key: "thisWeek", label: "This Week", start: startOfWeekISO(), end: todayISO() },
-      { key: "thisMonth", label: "This Month", start: startOfMonthISO(), end: todayISO() },
+      { key: "thisWeek", label: "This Week" },
+      { key: "thisMonth", label: "This Month" },
       { key: "custom", label: "Custom Range", start: null, end: null }
     ],
     []
@@ -191,11 +193,11 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
     };
   }, []);
 
-  // Executive-only: we need dataset max date to resolve "Till Date" and also anchor the other presets.
+  // We need dataset max date to anchor presets consistently across pages (prevents “yesterday” meaning
+  // different things on different routes).
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!isExecutive) return;
       try {
         const res = await api.datasetsProcessed();
         if (!cancelled) setDatasetsMeta(res?.datasets || []);
@@ -241,6 +243,19 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
     return y;
   }, [datasetMaxDate]);
 
+  function resolvePresetRange(key) {
+    const k = String(key || "").trim();
+    const end = anchorEnd || daysAgoISO(1);
+    if (k === "yesterday" || k === "today") return { start: end, end };
+    if (k === "last7") return { start: addDaysISO(end, -6), end };
+    if (k === "last14") return { start: addDaysISO(end, -13), end };
+    if (k === "last30") return { start: addDaysISO(end, -29), end };
+    if (k === "thisWeek") return { start: startOfWeekFromISO(end), end };
+    if (k === "thisMonth") return { start: startOfMonthFromISO(end), end };
+    if (k === "tillDate") return { start: datasetMinDate || startOfFYISO(end), end };
+    return { start: filters?.start_date || end, end: filters?.end_date || end };
+  }
+
   // Default for Executive Overview: Yesterday (anchored to dataset max date).
   useEffect(() => {
     if (!isExecutive) return;
@@ -252,6 +267,24 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
     setFilters((s) => ({ ...s, start_date: y, end_date: y }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isExecutive, datasetMaxDate]);
+
+  // Deep Dive default: load the *full* dataset range on landing/refresh (min → max),
+  // and auto-apply so charts render without requiring GO.
+  useEffect(() => {
+    if (!isDeepDive) return;
+    if (!datasetMaxDate) return; // wait until dataset meta is available
+
+    // If the app is still on the generic 30-day default, snap to Till Date.
+    const looksDefault = filters?.start_date === daysAgoISO(29) && filters?.end_date === todayISO();
+    if (!looksDefault) return;
+
+    const r = resolvePresetRange("tillDate");
+    const next = { ...filters, start_date: r.start, end_date: r.end };
+    setPreset("tillDate");
+    setFilters(next);
+    if (onApply) onApply(next); // auto-apply so Deep Dive loads immediately
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDeepDive, datasetMaxDate]);
 
   const resolvedRangeLabel = useMemo(() => {
     if (!filters?.start_date || !filters?.end_date) return "Select a date range";
@@ -265,7 +298,7 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
   }, [filters?.start_date, filters?.end_date, isExecutive, preset]);
 
   return (
-    <div className="sticky top-[64px] z-10 bg-white border-b border-slateink-100">
+    <div ref={ref} className="sticky z-40 bg-white border-b border-slateink-100" style={{ top: "var(--cgda-navbar-h, 64px)" }}>
       <div className="mx-auto max-w-7xl px-4 lg:px-6 py-2">
         <Card className="px-3 py-2 rounded-2xl">
           <div className="flex flex-wrap items-end gap-2">
@@ -348,7 +381,8 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
                       setPreset(key);
                       const p = presets.find((x) => x.key === key);
                       if (p && p.key !== "custom") {
-                        setFilters((s) => ({ ...s, start_date: p.start, end_date: p.end }));
+                        const r = resolvePresetRange(key);
+                        setFilters((s) => ({ ...s, start_date: r.start, end_date: r.end }));
                       }
                     }}
                     className="mt-1 h-9 rounded-xl border border-slateink-200 bg-white px-2 text-xs outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
@@ -460,21 +494,23 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
               </div>
             </div>
 
-            <div>
-              <div className="text-xs font-semibold text-slateink-600">Category</div>
-              <div className="mt-1">
-                <Select
-                  value={filters.category}
-                  onChange={(category) => {
-                    const next = { ...filters, category };
-                    setFilters(next);
-                    if (isExecutive && onApply) onApply(next);
-                  }}
-                  options={dims.categories || []}
-                  placeholder="All categories"
-                />
+            {showCategory ? (
+              <div>
+                <div className="text-xs font-semibold text-slateink-600">Category</div>
+                <div className="mt-1">
+                  <Select
+                    value={filters.category}
+                    onChange={(category) => {
+                      const next = { ...filters, category };
+                      setFilters(next);
+                      if (isExecutive && onApply) onApply(next);
+                    }}
+                    options={dims.categories || []}
+                    placeholder="All categories"
+                  />
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div className="ml-auto flex items-center gap-2">
               {!isExecutive ? (
@@ -565,6 +601,8 @@ export default function Filters({ filters, setFilters, onApply, showDataset = tr
       ) : null}
     </div>
   );
-}
+});
+
+export default Filters;
 
 

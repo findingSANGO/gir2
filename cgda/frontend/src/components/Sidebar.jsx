@@ -6,7 +6,7 @@ const items = [
   { to: "/", label: "Executive Overview", icon: LayoutDashboard },
   { to: "/datasets", label: "Datasets", icon: Database },
   { to: "/issue-intelligence", label: "Issue Intelligence", icon: BarChart3 },
-  { to: "/issue-intelligence2", label: "Issue Intelligence 2", icon: BarChart3 },
+  { to: "/issue-intelligence2", label: "Deep Dive", icon: BarChart3 },
   { to: "/feedback-analytics", label: "Citizen Feedback", icon: Star },
   { to: "/closure-analytics", label: "Closure Analytics", icon: Clock },
   { to: "/predictive-analytics", label: "Predictive Analytics", icon: Brain }

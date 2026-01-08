@@ -1202,6 +1202,388 @@ class AnalyticsService:
             "insights": insights[:5],
         }
 
+    def closure_sla_snapshot(self, db: Session, f: Filters) -> dict:
+        """
+        Dedicated Closure Timeliness (SLA) snapshot for embedding in Issue Intelligence 2 → Overview.
+
+        Returns:
+        - KPIs (median, p90, within 1 day, within 7 days, >30 days)
+        - Bucket distribution in days for closed grievances
+        """
+        import datetime as dt
+        from sqlalchemy import Integer, cast
+
+        start = f.start_date or dt.date(1900, 1, 1)
+        end = f.end_date or dt.date.today()
+
+        base = self._processed_filter_subquery(
+            db,
+            start_date=start,
+            end_date=end,
+            wards=f.wards,
+            department=f.department,
+            category=f.category,
+            source=f.source,
+        )
+
+        # Prefer precomputed resolution_days; fallback to date diff.
+        jd_days = func.julianday(base.c.closed_date) - func.julianday(base.c.created_date)
+        closed_days = case(
+            (
+                (base.c.closed_date.is_not(None)) & (base.c.created_date.is_not(None)) & (jd_days >= 0),
+                jd_days,
+            ),
+            else_=None,
+        )
+        closure_ok = case(
+            (
+                (base.c.resolution_days.is_not(None)) & (base.c.resolution_days >= 0),
+                base.c.resolution_days,
+            ),
+            else_=closed_days,
+        )
+
+        vals = db.execute(select(closure_ok).where(closure_ok.is_not(None)).select_from(base)).scalars().all()
+        xs = [float(x) for x in vals if x is not None]
+        xs.sort()
+        n = len(xs)
+
+        median = self._median(xs) if xs else None
+        p90 = None
+        if xs:
+            idx = int(round(0.9 * (len(xs) - 1)))
+            idx = max(0, min(idx, len(xs) - 1))
+            p90 = float(xs[idx])
+
+        # Bucket distribution (days)
+        buckets = [
+            ("0-1 Day", 0, 1, "standard"),
+            ("1-3 Days", 1, 3, "standard"),
+            ("3-7 Days", 3, 7, "standard"),
+            ("7-14 Days", 7, 14, "standard"),
+            ("14-30 Days", 14, 30, "standard"),
+            ("30-60 Days", 30, 60, "long_tail"),
+            ("60+ Days", 60, None, "long_tail"),
+        ]
+
+        counts: dict[str, int] = {b[0]: 0 for b in buckets}
+        within_1 = 0
+        within_7 = 0
+        over_30 = 0
+        for v in xs:
+            if v <= 1:
+                within_1 += 1
+            if v <= 7:
+                within_7 += 1
+            if v > 30:
+                over_30 += 1
+            # bucket assignment (exclusive lower bound, inclusive upper bound)
+            placed = False
+            for label, lo, hi, _band in buckets:
+                if hi is None:
+                    if v > lo:
+                        counts[label] += 1
+                        placed = True
+                        break
+                else:
+                    if v > lo and v <= hi:
+                        counts[label] += 1
+                        placed = True
+                        break
+            if not placed:
+                # For exact 0 days, put into 0-1 Day.
+                if v == 0:
+                    counts["0-1 Day"] += 1
+
+        def pct(x: int) -> float | None:
+            if not n:
+                return None
+            return round((100.0 * float(x)) / float(n), 2)
+
+        dist_rows = []
+        for label, lo, hi, band in buckets:
+            c = int(counts.get(label, 0))
+            dist_rows.append(
+                {
+                    "bucket": label,
+                    "count": c,
+                    "pct": pct(c),
+                    "band": band,
+                    "lo": lo,
+                    "hi": hi,
+                }
+            )
+
+        return {
+            "filters": {
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "wards": f.wards,
+                "department": f.department,
+                "category": f.category,
+                "source": f.source,
+            },
+            "as_of": end.isoformat(),
+            "based_on": {"closed_n": int(n)},
+            "kpis": {
+                "median_days": round(float(median), 2) if median is not None else None,
+                "p90_days": round(float(p90), 2) if p90 is not None else None,
+                "within_1d_pct": pct(within_1),
+                "within_7d_pct": pct(within_7),
+                "over_30d_pct": pct(over_30),
+            },
+            "distribution": {"rows": dist_rows},
+        }
+
+    def forwarding_snapshot(self, db: Session, f: Filters) -> dict:
+        """
+        Dedicated Forwarding Analytics snapshot for embedding in Issue Intelligence 2 → Overview.
+
+        Uses grievances_processed:
+        - forward_count (number of forwards)
+        - forwarded_at (timestamp of first forward)
+        - created_at/created_date (for forward delay)
+        """
+        import datetime as dt
+
+        start = f.start_date or dt.date(1900, 1, 1)
+        end = f.end_date or dt.date.today()
+
+        base = self._processed_filter_subquery(
+            db,
+            start_date=start,
+            end_date=end,
+            wards=f.wards,
+            department=f.department,
+            category=f.category,
+            source=f.source,
+        )
+
+        total = int(db.scalar(select(func.count()).select_from(base)) or 0)
+
+        forwarded_flag = case(((base.c.forward_count.is_not(None)) & (base.c.forward_count > 0), 1), else_=0)
+        forwarded_n = int(db.scalar(select(func.sum(forwarded_flag)).select_from(base)) or 0)
+        forwarded_pct = round((100.0 * forwarded_n / total), 2) if total else 0.0
+
+        # Forward delay in days (created_at -> forwarded_at). If timestamps are missing, fall back to date-level.
+        jd_delay_dt = func.julianday(base.c.forwarded_at) - func.julianday(base.c.created_at)
+        jd_delay_date = func.julianday(base.c.forwarded_at) - func.julianday(base.c.created_date)
+        delay = case(
+            (
+                (base.c.forwarded_at.is_not(None)) & (base.c.created_at.is_not(None)) & (jd_delay_dt >= 0),
+                jd_delay_dt,
+            ),
+            else_=case(
+                (
+                    (base.c.forwarded_at.is_not(None)) & (base.c.created_date.is_not(None)) & (jd_delay_date >= 0),
+                    jd_delay_date,
+                ),
+                else_=None,
+            ),
+        )
+
+        dvals = db.execute(select(delay).where(delay.is_not(None)).select_from(base)).scalars().all()
+        xs = [float(x) for x in dvals if x is not None]
+        xs.sort()
+        n_delay = len(xs)
+        med_delay = self._median(xs) if xs else None
+        p90_delay = None
+        if xs:
+            idx = int(round(0.9 * (len(xs) - 1)))
+            idx = max(0, min(idx, len(xs) - 1))
+            p90_delay = float(xs[idx])
+
+        # Hop distribution among forwarded tickets:
+        # - 1 Hop = forward_count == 1
+        # - 2 Hops = forward_count == 2
+        # - 3+ Hops = forward_count >= 3
+        hop_1 = int(
+            db.scalar(select(func.count()).where(base.c.forward_count == 1).select_from(base)) or 0
+        )
+        hop_2 = int(
+            db.scalar(select(func.count()).where(base.c.forward_count == 2).select_from(base)) or 0
+        )
+        hop_3p = int(
+            db.scalar(select(func.count()).where(base.c.forward_count >= 3).select_from(base)) or 0
+        )
+
+        # “Multiple hops” counters (match screenshot semantics)
+        refwd_ge2 = int(db.scalar(select(func.count()).where(base.c.forward_count >= 2).select_from(base)) or 0)
+        chronic_ge3 = int(db.scalar(select(func.count()).where(base.c.forward_count >= 3).select_from(base)) or 0)
+
+        return {
+            "filters": {
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "wards": f.wards,
+                "department": f.department,
+                "category": f.category,
+                "source": f.source,
+            },
+            "as_of": end.isoformat(),
+            "based_on": {"total_n": total, "forwarded_n": forwarded_n, "delay_n": int(n_delay)},
+            "kpis": {
+                "forwarded_pct": float(forwarded_pct),
+                "median_forward_delay_days": round(float(med_delay), 2) if med_delay is not None else None,
+                "p90_forward_delay_days": round(float(p90_delay), 2) if p90_delay is not None else None,
+            },
+            "distribution": {
+                "among_forwarded_n": forwarded_n,
+                "hops": [
+                    {"bucket": "1 Hop (Standard)", "count": hop_1, "band": "standard"},
+                    {"bucket": "2 Hops (Correction)", "count": hop_2, "band": "correction"},
+                    {"bucket": "3+ Hops (Confusion)", "count": hop_3p, "band": "confusion"},
+                ],
+            },
+            "multiple_hops": {
+                "reforwarded_ge2": refwd_ge2,
+                "chronic_ge3": chronic_ge3,
+            },
+            "insight": (
+                f"Insight: Every forward event resets the \"clock\" for the citizen but adds "
+                f"{round(float(med_delay), 2) if med_delay is not None else '—'} days of hidden wait time."
+            ),
+        }
+
+    def forwarding_impact_resolution(self, db: Session, f: Filters) -> dict:
+        """
+        Forwarding Impact on Resolution Time ("process tax") analysis.
+        Compares closure time distribution for:
+        - Direct closure (not forwarded): forward_count == 0
+        - Re-routed (forwarded): forward_count > 0
+
+        Uses closed tickets only (needs valid closure time).
+        """
+        import datetime as dt
+
+        start = f.start_date or dt.date(1900, 1, 1)
+        end = f.end_date or dt.date.today()
+
+        base = self._processed_filter_subquery(
+            db,
+            start_date=start,
+            end_date=end,
+            wards=f.wards,
+            department=f.department,
+            category=f.category,
+            source=f.source,
+        )
+
+        # Closure time in days: prefer resolution_days else closed_date-created_date
+        jd_days = func.julianday(base.c.closed_date) - func.julianday(base.c.created_date)
+        closed_days = case(
+            (
+                (base.c.closed_date.is_not(None)) & (base.c.created_date.is_not(None)) & (jd_days >= 0),
+                jd_days,
+            ),
+            else_=None,
+        )
+        closure_ok = case(
+            (
+                (base.c.resolution_days.is_not(None)) & (base.c.resolution_days >= 0),
+                base.c.resolution_days,
+            ),
+            else_=closed_days,
+        )
+
+        # Only rows with valid closure time
+        closed_base = select(
+            base.c.forward_count.label("forward_count"),
+            closure_ok.label("closure_days"),
+        ).where(closure_ok.is_not(None)).subquery()
+
+        direct_q = select(closed_base.c.closure_days).where(
+            (closed_base.c.forward_count.is_(None)) | (closed_base.c.forward_count <= 0)
+        )
+        fwd_q = select(closed_base.c.closure_days).where(closed_base.c.forward_count > 0)
+
+        direct_vals = [float(x) for x in db.execute(direct_q).scalars().all() if x is not None]
+        fwd_vals = [float(x) for x in db.execute(fwd_q).scalars().all() if x is not None]
+        direct_vals.sort()
+        fwd_vals.sort()
+
+        def _mean(xs: list[float]) -> float | None:
+            if not xs:
+                return None
+            return float(sum(xs) / len(xs))
+
+        def _bucket_counts(xs: list[float]) -> list[dict]:
+            # Match screenshot buckets (coarser; focuses on tail)
+            buckets = [
+                ("0-1d", 0, 1),
+                ("1-3d", 1, 3),
+                ("3-7d", 3, 7),
+                ("7-14d", 7, 14),
+                ("14-30d", 14, 30),
+                ("30d+", 30, None),
+            ]
+            n = len(xs)
+            counts = {b[0]: 0 for b in buckets}
+            for v in xs:
+                placed = False
+                for label, lo, hi in buckets:
+                    if hi is None:
+                        if v > lo:
+                            counts[label] += 1
+                            placed = True
+                            break
+                    else:
+                        if v > lo and v <= hi:
+                            counts[label] += 1
+                            placed = True
+                            break
+                if not placed and v == 0:
+                    counts["0-1d"] += 1
+            rows = []
+            for label, lo, hi in buckets:
+                c = int(counts.get(label, 0))
+                pct = round((100.0 * c / n), 2) if n else None
+                rows.append({"bucket": label, "count": c, "pct": pct, "lo": lo, "hi": hi})
+            return rows
+
+        direct_n = len(direct_vals)
+        fwd_n = len(fwd_vals)
+
+        direct_median = self._median(direct_vals) if direct_vals else None
+        fwd_median = self._median(fwd_vals) if fwd_vals else None
+        direct_mean = _mean(direct_vals)
+        fwd_mean = _mean(fwd_vals)
+
+        uplift_median_pct = None
+        if direct_median and direct_median > 0 and fwd_median is not None:
+            uplift_median_pct = round(((float(fwd_median) - float(direct_median)) / float(direct_median)) * 100.0, 0)
+
+        heavy_tail = False
+        if fwd_mean is not None and direct_mean is not None and fwd_mean > direct_mean * 2:
+            heavy_tail = True
+
+        return {
+            "filters": {
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "wards": f.wards,
+                "department": f.department,
+                "category": f.category,
+                "source": f.source,
+            },
+            "as_of": end.isoformat(),
+            "based_on": {"closed_n": int(direct_n + fwd_n), "direct_n": int(direct_n), "forwarded_n": int(fwd_n)},
+            "direct": {
+                "median_days": round(float(direct_median), 2) if direct_median is not None else None,
+                "mean_days": round(float(direct_mean), 2) if direct_mean is not None else None,
+                "distribution": _bucket_counts(direct_vals),
+            },
+            "forwarded": {
+                "median_days": round(float(fwd_median), 2) if fwd_median is not None else None,
+                "mean_days": round(float(fwd_mean), 2) if fwd_mean is not None else None,
+                "distribution": _bucket_counts(fwd_vals),
+            },
+            "comparison": {
+                "median_uplift_pct": uplift_median_pct,
+                "heavy_tail": bool(heavy_tail),
+            },
+        }
+
     def _base(self, db: Session, f: Filters):
         q = select(GrievanceRaw.id)
         if f.start_date:
