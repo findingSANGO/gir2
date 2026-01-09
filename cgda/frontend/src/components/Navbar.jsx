@@ -8,7 +8,7 @@ const Navbar = forwardRef(function Navbar({ title, user, onLogout, showUserContr
       <div className="mx-auto max-w-7xl px-4 lg:px-6 py-3 flex items-center justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold text-slateink-900 leading-tight">{title}</div>
-          <div className="text-sm text-slateink-500">Citizen’s Grievance Data Analytics (CGDA)</div>
+          <div className="text-sm text-slateink-500">AI enabled Deep Dive</div>
         </div>
         {showUserControls && (
           <div className="flex items-center gap-2">

@@ -255,6 +255,9 @@ export function LineCard({ title, subtitle, right, data, xKey, lines, height = 2
                   strokeWidth={2.5}
                   dot={false}
                   activeDot={{ r: 4 }}
+                  isAnimationActive
+                  animationDuration={550}
+                  animationEasing="ease-in-out"
                 />
               ))}
             </LineChart>

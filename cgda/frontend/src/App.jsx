@@ -138,7 +138,7 @@ export default function App() {
         <Route
           path="/"
           element={
-            <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
+            <Shell title="Citizen Grievance Intelligence" filtersProps={{ showCategory: false }} minimalChrome>
               <IssueIntelligence2 />
             </Shell>
           }
@@ -172,7 +172,7 @@ export default function App() {
         <Route
           path="/issue-intelligence2"
           element={
-            <Shell title="Deep Dive" filtersProps={{ showCategory: false }} minimalChrome>
+            <Shell title="Citizen Grievance Intelligence" filtersProps={{ showCategory: false }} minimalChrome>
               <IssueIntelligence2 />
             </Shell>
           }

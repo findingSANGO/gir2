@@ -2,6 +2,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { LineCard, VerticalBarCard } from "../components/Charts.jsx";
 import { api } from "../services/api.js";
 import { FiltersContext } from "../App.jsx";
+import { colorForKey } from "../utils/chartColors.js";
 import {
   BarChart3,
   ClipboardList,
@@ -240,6 +241,10 @@ export default function IssueIntelligence2() {
   const [fwdError, setFwdError] = useState("");
   const [fwdImpactError, setFwdImpactError] = useState("");
   const [hoverSubtopic, setHoverSubtopic] = useState("");
+  const [loadTrendSubtopic, setLoadTrendSubtopic] = useState("");
+  const [loadTrend, setLoadTrend] = useState(null);
+  const [loadTrendLoading, setLoadTrendLoading] = useState(false);
+  const [loadTrendError, setLoadTrendError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -385,8 +390,8 @@ export default function IssueIntelligence2() {
 
   const slides = [
     { key: "overview", label: "Overview" },
-    { key: "load", label: "Load View" },
-    { key: "pain", label: "Pain Matrix" },
+    { key: "load", label: "Issue Intelligence" },
+    { key: "pain", label: "Priority Matrix" },
     { key: "hotspots", label: "Hotspots" },
     { key: "exceptions", label: "Exceptions" },
     { key: "ward", label: "Ward Ownership" },
@@ -413,6 +418,67 @@ export default function IssueIntelligence2() {
       value: metric === "priority" ? r.priority_sum : r.count
     }));
   }, [top, metric]);
+
+  const loadTrendOptions = useMemo(() => {
+    // Use the same Top Sub-Topics list for the trend selector (keeps UX tight + relevant)
+    const rows = payload?.load_view?.top_subtopics || [];
+    const uniq = new Set();
+    const out = [];
+    for (const r of rows) {
+      const s = String(r?.subTopic || "").trim();
+      if (!s || uniq.has(s)) continue;
+      uniq.add(s);
+      out.push(s);
+    }
+    return out;
+  }, [payload]);
+
+  // Default the Load View trend selector to the top-ranked subtopic.
+  useEffect(() => {
+    if (slide !== 1) return;
+    if (loadTrendSubtopic) return;
+    if (!loadTrendOptions.length) return;
+    setLoadTrendSubtopic(loadTrendOptions[0]);
+  }, [slide, loadTrendSubtopic, loadTrendOptions]);
+
+  // Load View: month-wise trend for the selected subtopic (respects global Deep Dive filters).
+  useEffect(() => {
+    if (slide !== 1) return;
+    if (!loadTrendSubtopic) return;
+    // IMPORTANT: load processed-data trend by reusing Issue Intelligence V2 with `subtopic_focus`.
+    // This keeps trend consistent with the file-pipeline dataset powering Deep Dive.
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadTrendError("");
+        // Keep the previous trend visible while we fetch the next one (prevents flicker).
+        setLoadTrendLoading(true);
+        const res = await api.issueIntelligenceV2({ ...filters, subtopic_focus: loadTrendSubtopic });
+        if (cancelled) return;
+        const months = res?.trend?.months || [];
+        const out = months.map((m) => ({ month: m.month, count: Number(m.count || 0) }));
+        setLoadTrend({ subTopic: loadTrendSubtopic, months: out });
+        setLoadTrendLoading(false);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadTrendLoading(false);
+        setLoadTrendError(e.message || "Failed to load sub-topic trend");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    slide,
+    loadTrendSubtopic,
+    filters.start_date,
+    filters.end_date,
+    (filters.wards || []).join(","),
+    filters.department,
+    filters.category,
+    filters.source
+  ]);
 
   const callouts = load?.callouts || {};
   const pain = payload?.pain_matrix || null;
@@ -472,8 +538,19 @@ export default function IssueIntelligence2() {
   const fwdTotal = Number(fwd?.based_on?.total_n || 0);
   const fwdN = Number(fwd?.based_on?.forwarded_n || 0);
   const hopRows = useMemo(() => {
+    function prettyBucket(b) {
+      const s = String(b || "");
+      if (s.toLowerCase().startsWith("1 hop")) return "1 Time";
+      if (s.toLowerCase().startsWith("2 hop")) return "2 Times";
+      if (s.toLowerCase().startsWith("3+")) return "3+ Times";
+      // fallback: handle numeric-like buckets
+      if (s.trim() === "1") return "1 Time";
+      if (s.trim() === "2") return "2 Times";
+      if (s.trim() === "3+") return "3+ Times";
+      return s;
+    }
     return (fwd?.distribution?.hops || []).map((r) => ({
-      bucket: r.bucket,
+      bucket: prettyBucket(r.bucket),
       count: Number(r.count || 0),
       band: r.band || "standard"
     }));
@@ -661,12 +738,11 @@ export default function IssueIntelligence2() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid gap-3 lg:grid-cols-3">
+                      <div className="grid gap-3 lg:grid-cols-2">
                         <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
-                          <div className="text-xs font-semibold text-blue-700">TICKETS FORWARDED</div>
+                          <div className="text-xs font-semibold text-blue-700">GRIEVANCES FORWARDED</div>
                           <div className="mt-2 text-4xl font-semibold text-slateink-900">
-                            {fmtPct(fwd?.kpis?.forwarded_pct)}{" "}
-                            <span className="text-base font-semibold text-slateink-400">of total volume</span>
+                            {fmtPct(fwd?.kpis?.forwarded_pct)}
                           </div>
                           <div className="mt-2 text-xs text-slateink-500">Routing intervention required</div>
                         </div>
@@ -677,16 +753,7 @@ export default function IssueIntelligence2() {
                             <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwd?.kpis?.median_forward_delay_days)}</div>
                             <div className="text-lg font-semibold text-slateink-500">days</div>
                           </div>
-                          <div className="mt-2 text-xs text-slateink-500">Time lost before reaching owner</div>
-                        </div>
-
-                        <div className="rounded-2xl bg-white ring-1 ring-slateink-200 p-4 shadow-card">
-                          <div className="text-xs font-semibold text-rose-700">P90 FORWARD DELAY</div>
-                          <div className="mt-2 flex items-baseline gap-2">
-                            <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwd?.kpis?.p90_forward_delay_days)}</div>
-                            <div className="text-lg font-semibold text-slateink-500">days</div>
-                          </div>
-                          <div className="mt-2 text-xs text-slateink-500">Severe routing bottleneck cases</div>
+                          <div className="mt-2 text-xs text-slateink-500">Time lost before reaching concerned officer</div>
                         </div>
                       </div>
 
@@ -695,30 +762,50 @@ export default function IssueIntelligence2() {
                           <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
                             <div className="text-lg font-semibold text-slateink-900">Forwarding Events Distribution</div>
                             <div className="text-xs font-semibold text-slateink-500">
-                              Among forwarded tickets (n ≈ {fwdN.toLocaleString()})
+                              Among forwarded grievances (n ≈ {fwdN.toLocaleString()})
                             </div>
                           </div>
                           <div className="p-4">
                             <div className="h-[260px]">
                               <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={hopRows} margin={{ top: 10, right: 16, bottom: 10, left: 8 }}>
+                                <BarChart data={hopRows} margin={{ top: 12, right: 16, bottom: 34, left: 8 }}>
                                   <CartesianGrid strokeDasharray="2 10" stroke="#eceef2" vertical={false} />
                                   <XAxis
                                     dataKey="bucket"
+                                    height={44}
                                     tick={{ fontSize: 12, fill: "#64748b" }}
+                                    tickMargin={10}
                                     axisLine={false}
                                     tickLine={false}
                                     interval={0}
+                                    label={{ value: "Forwarded", position: "bottom", offset: 18, fill: "#94a3b8", fontSize: 11 }}
                                   />
-                                  <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                                  <YAxis
+                                    tick={{ fontSize: 12, fill: "#64748b" }}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    label={{
+                                      value: "Number of Grievances",
+                                      angle: -90,
+                                      position: "insideLeft",
+                                      offset: 0,
+                                      fill: "#94a3b8",
+                                      fontSize: 11
+                                    }}
+                                  />
                                   <Tooltip />
                                   <Bar dataKey="count" radius={[10, 10, 4, 4]} maxBarSize={90}>
-                                    {(hopRows || []).map((r, idx) => (
-                                      <Cell
-                                        key={idx}
-                                        fill={r.band === "confusion" ? "#ef4444" : r.band === "correction" ? "#6366f1" : "#93c5fd"}
-                                      />
+                                    {(hopRows || []).map((_, idx) => (
+                                      <Cell key={idx} fill="#2563eb" opacity={0.9} />
                                     ))}
+                                    <LabelList
+                                      dataKey="count"
+                                      position="center"
+                                      fill="#ffffff"
+                                      fontSize={14}
+                                      fontWeight={800}
+                                      formatter={(v) => String(Number(v || 0).toLocaleString())}
+                                    />
                                   </Bar>
                                 </BarChart>
                               </ResponsiveContainer>
@@ -738,7 +825,7 @@ export default function IssueIntelligence2() {
                                 </div>
                                 <div>
                                   <div className="text-sm font-semibold text-slateink-900">Re-forwarded</div>
-                                  <div className="text-xs text-slateink-500">Tickets moved &gt;2 times</div>
+                                  <div className="text-xs text-slateink-500">Grievances moved &gt;2 times</div>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -756,7 +843,7 @@ export default function IssueIntelligence2() {
                                 </div>
                                 <div>
                                   <div className="text-sm font-semibold text-slateink-900">Chronic Routing Issues</div>
-                                  <div className="text-xs text-slateink-500">Tickets moved &gt;3 times</div>
+                                  <div className="text-xs text-slateink-500">Grievances moved &gt;3 times</div>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -783,7 +870,7 @@ export default function IssueIntelligence2() {
                 <div className="px-5 py-4 border-b border-slateink-100 flex items-start justify-between gap-4">
                   <div>
                     <div className="text-xl font-semibold text-slateink-900">Forwarding Impact on Resolution Time</div>
-                    <div className="mt-1 text-sm text-slateink-500">The “process tax” analysis (tickets with close date)</div>
+                    <div className="mt-1 text-sm text-slateink-500">The delay analysis</div>
                   </div>
                   <div className="text-xs font-semibold text-slateink-400">{fwdImpact?.as_of ? String(fwdImpact.as_of) : ""}</div>
                 </div>
@@ -805,9 +892,6 @@ export default function IssueIntelligence2() {
                       <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
                         <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center">
-                              <span className="text-emerald-700 font-semibold">✓</span>
-                            </div>
                             <div>
                               <div className="text-lg font-semibold text-slateink-900">Direct Closure (Not Forwarded)</div>
                               <div className="text-xs font-semibold text-slateink-500">Efficient Path</div>
@@ -862,9 +946,6 @@ export default function IssueIntelligence2() {
                       <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
                         <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-rose-50 ring-1 ring-rose-100 flex items-center justify-center">
-                              <span className="text-rose-700 font-semibold">✖</span>
-                            </div>
                             <div>
                               <div className="text-lg font-semibold text-slateink-900">Re-routed (Forwarded)</div>
                               <div className="text-xs font-semibold text-slateink-500">High Friction</div>
@@ -891,9 +972,6 @@ export default function IssueIntelligence2() {
                                 <div className="text-4xl font-semibold text-slateink-900">{fmt2(fwdImpact?.forwarded?.mean_days)}</div>
                                 <div className="text-lg font-semibold text-slateink-500">days</div>
                               </div>
-                              {fwdImpact?.comparison?.heavy_tail ? (
-                                <div className="mt-2 text-sm font-semibold text-rose-500">Heavy Tail Impact</div>
-                              ) : null}
                             </div>
                           </div>
 
@@ -932,8 +1010,7 @@ export default function IssueIntelligence2() {
               <div className="rounded-2xl bg-gradient-to-br from-slateink-950 via-slateink-900 to-indigo-950 ring-1 ring-slateink-900/30 px-5 py-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-white">
-                    <div className="text-lg font-semibold">Load View: Top Sub-Topics</div>
-                    <div className="text-xs text-white/70">{periodLabel} • Overall View</div>
+                    <div className="text-lg font-semibold">AI enabled Subtopic Analysis</div>
                   </div>
                   <MetricToggle value={metric} onChange={setMetric} />
                 </div>
@@ -943,11 +1020,7 @@ export default function IssueIntelligence2() {
                 <div className="lg:col-span-8">
                   <VerticalBarCard
                     title={`Top 10 Sub-Topics by ${metric === "priority" ? "Priority" : "Volume"}`}
-                    subtitle={
-                      load?.source
-                        ? `Source: ${load.source} • Total Records Analyzed: ${load.total_records_analyzed || 0}`
-                        : undefined
-                    }
+                    subtitle={undefined}
                     data={chartRows}
                     yKey="subTopic"
                     valueKey="value"
@@ -1008,6 +1081,39 @@ export default function IssueIntelligence2() {
                   </div>
                 </div>
               </div>
+
+              {/* Copy from Issue Intelligence: Month-wise Sub-Topic Trends (shown at bottom of Load View) */}
+              {loadTrendError ? (
+                <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{loadTrendError}</div>
+              ) : (
+                <LineCard
+                  title="Month-wise Sub-Topic Trends"
+                  subtitle="Counts grouped by month (Created Date)."
+                  right={
+                    <div className="flex flex-wrap items-center gap-2">
+                      {loadTrendLoading ? (
+                        <span className="text-xs font-semibold text-slateink-500">Updating…</span>
+                      ) : null}
+                      <span className="text-xs text-slateink-500">Sub-Topic</span>
+                      <select
+                        value={loadTrendSubtopic}
+                        onChange={(e) => setLoadTrendSubtopic(e.target.value)}
+                        className="h-9 rounded-xl border border-slateink-200 bg-white px-3 text-xs font-semibold outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100 max-w-[360px]"
+                      >
+                        {loadTrendOptions.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  }
+                  data={loadTrend ? loadTrend.months || [] : null}
+                  xKey="month"
+                  lines={[{ key: "count", name: "Grievances", color: colorForKey(loadTrendSubtopic) }]}
+                  height={340}
+                />
+              )}
             </div>
           ) : null}
 
