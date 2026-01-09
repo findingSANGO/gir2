@@ -6,6 +6,7 @@ import AIBadge from "../components/AIBadge.jsx";
 import { Card, CardContent, CardHeader } from "../components/ui/Card.jsx";
 import Badge from "../components/ui/Badge.jsx";
 import { colorForKey } from "../utils/chartColors.js";
+import { displaySubtopicLabel } from "../utils/labels.js";
 
 function NoData({ text = "No data for selection." }) {
   return <div className="text-sm text-slateink-500">{text}</div>;
@@ -32,6 +33,10 @@ function Toggle({ value, onChange, options }) {
       })}
     </div>
   );
+}
+
+function showSubtopic(s) {
+  return displaySubtopicLabel(s) || "—";
 }
 
 export default function IssueIntelligence() {
@@ -104,6 +109,13 @@ export default function IssueIntelligence() {
     return sorted;
   }, [payload, modeOverall]);
 
+  const topRowsDisplay = useMemo(() => {
+    return (topRows || []).map((r) => ({
+      ...r,
+      subTopicDisplay: showSubtopic(r?.subTopic)
+    }));
+  }, [topRows]);
+
   const byWardRows = useMemo(() => {
     const rows = payload?.by_ward?.rows || [];
     const sorted = [...rows].sort((a, b) =>
@@ -113,6 +125,13 @@ export default function IssueIntelligence() {
     );
     return sorted;
   }, [payload, modeWard]);
+
+  const byWardRowsDisplay = useMemo(() => {
+    return (byWardRows || []).map((r) => ({
+      ...r,
+      subTopicDisplay: showSubtopic(r?.subTopic)
+    }));
+  }, [byWardRows]);
 
   if (error) {
     return <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{error}</div>;
@@ -130,8 +149,9 @@ export default function IssueIntelligence() {
         subtitle="Top 10 standardized issues for the selected filters"
         ai={showAI}
         right={<Toggle value={modeOverall} onChange={setModeOverall} options={modeOptions} />}
-        data={topRows.slice(0, 10)}
-        yKey="subTopic"
+        data={topRowsDisplay.slice(0, 10)}
+        yKey="subTopicDisplay"
+        colorKey="subTopic"
         valueKey={modeOverall === "priority" ? "priority_sum" : "count"}
         height={380}
         total={modeOverall === "priority" ? null : Number(topRows.reduce((acc, r) => acc + Number(r.count || 0), 0))}
@@ -186,7 +206,7 @@ export default function IssueIntelligence() {
                         <td className="py-2 pr-3">
                           <span className="inline-flex items-center gap-2 font-semibold text-slateink-900">
                             <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorForKey(r.subTopic) }} />
-                            {r.subTopic}
+                              {showSubtopic(r.subTopic)}
                           </span>
                         </td>
                         <td className="py-2 pr-3">{r.ward}</td>
@@ -238,8 +258,9 @@ export default function IssueIntelligence() {
                 <Toggle value={modeWard} onChange={setModeWard} options={modeOptions} />
               </div>
             }
-            data={byWardRows || []}
-            yKey="subTopic"
+            data={byWardRowsDisplay || []}
+            yKey="subTopicDisplay"
+            colorKey="subTopic"
             valueKey={modeWard === "priority" ? "priority_sum" : "count"}
             height={340}
             total={modeWard === "priority" ? null : Number((byWardRows || []).reduce((acc, r) => acc + Number(r.count || 0), 0))}
@@ -329,7 +350,7 @@ export default function IssueIntelligence() {
                           <td className="py-2 pr-3">
                             <span className="inline-flex items-center gap-2" title="Color is consistent across Issue Intelligence charts">
                               <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorForKey(r.subTopic) }} />
-                              {r.subTopic}
+                              {showSubtopic(r.subTopic)}
                             </span>
                           </td>
                           <td className="py-2 pr-3 font-semibold text-slateink-900">{r.count}</td>
@@ -370,7 +391,7 @@ export default function IssueIntelligence() {
             >
               {(payload?.options?.subtopics || []).map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {showSubtopic(s)}
                 </option>
               ))}
             </select>

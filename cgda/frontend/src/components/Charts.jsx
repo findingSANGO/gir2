@@ -167,6 +167,7 @@ export function VerticalBarCard({
   right,
   data,
   yKey,
+  colorKey,
   valueKey,
   height = 320,
   ai = false,
@@ -174,6 +175,7 @@ export function VerticalBarCard({
   showLegend = false
 }) {
   // Expect [{[yKey]: string, [valueKey]: number}]
+  const ck = colorKey || yKey;
   return (
     <ChartShell title={title} subtitle={subtitle} right={right} ai={ai}>
       {!data ? (
@@ -215,7 +217,7 @@ export function VerticalBarCard({
               ) : null}
               <Bar dataKey={valueKey} radius={[10, 10, 10, 10]}>
                 {(data || []).map((d) => (
-                  <Cell key={String(d?.[yKey])} fill={colorForKey(d?.[yKey])} />
+                  <Cell key={String(d?.[ck] ?? d?.[yKey])} fill={colorForKey(d?.[ck])} />
                 ))}
               </Bar>
             </BarChart>

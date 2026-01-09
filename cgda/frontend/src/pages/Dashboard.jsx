@@ -6,6 +6,7 @@ import { api } from "../services/api.js";
 import { FiltersContext } from "../App.jsx";
 import AIBadge from "../components/AIBadge.jsx";
 import { Card, CardContent, CardHeader } from "../components/ui/Card.jsx";
+import { displaySubtopicLabel } from "../utils/labels.js";
 
 function Toggle({ value, onChange, options }) {
   return (
@@ -122,6 +123,7 @@ export default function Dashboard() {
     );
     return sorted.map((r) => ({
       ...r,
+      subTopicDisplay: displaySubtopicLabel(r?.subTopic) || "—",
       tooltip_lines: [
         { label: "Volume", value: r.count },
         { label: "Priority (sum)", value: r.priority_sum }
@@ -294,7 +296,8 @@ export default function Dashboard() {
             ai={showAI}
             right={<Toggle value={mode} onChange={setMode} options={modeOptions} />}
             data={topSubtopics.slice(0, 10)}
-            yKey="subTopic"
+            yKey="subTopicDisplay"
+            colorKey="subTopic"
             valueKey={mode === "priority" ? "priority_sum" : "count"}
             height={360}
             total={totalForMode}

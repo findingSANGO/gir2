@@ -3,6 +3,7 @@ import { LineCard, VerticalBarCard } from "../components/Charts.jsx";
 import { api } from "../services/api.js";
 import { FiltersContext } from "../App.jsx";
 import { colorForKey } from "../utils/chartColors.js";
+import { displaySubtopicLabel } from "../utils/labels.js";
 import {
   BarChart3,
   ClipboardList,
@@ -91,6 +92,10 @@ function MetricToggle({ value, onChange }) {
   );
 }
 
+function showSubtopic(s) {
+  return displaySubtopicLabel(s) || "—";
+}
+
 function ProgressRow({ label, pct, subtitle }) {
   const p = Math.max(0, Math.min(100, Number(pct || 0)));
   return (
@@ -150,7 +155,7 @@ function BubbleShape(props) {
   const s = Number(size || 0);
   const r = Math.max(7, Math.sqrt(Math.max(0, s)) * 0.9);
   const isActive = hoveredSubtopic && payload?.subTopic === hoveredSubtopic;
-  const label = showLabel ? String(payload?.subTopic || "") : "";
+  const label = showLabel ? showSubtopic(payload?.subTopic) : "";
   const txt = shortLabel(label);
   return (
     <g>
@@ -187,7 +192,7 @@ function PainTooltip({ active, payload }) {
   const p = payload[0]?.payload || {};
   return (
     <div className="rounded-xl bg-white p-3 shadow-lg ring-1 ring-slateink-200">
-      <div className="text-sm font-semibold text-slateink-900">{p.subTopic || "—"}</div>
+      <div className="text-sm font-semibold text-slateink-900">{showSubtopic(p.subTopic)}</div>
       <div className="mt-2 space-y-1 text-xs text-slateink-700">
         <div className="flex items-center justify-between gap-6">
           <span className="text-slateink-500">Volume</span>
@@ -415,6 +420,7 @@ export default function IssueIntelligence2() {
     return sorted.slice(0, 10).map((r) => ({
       ...r,
       subTopic: r.subTopic,
+      subTopicDisplay: showSubtopic(r.subTopic),
       value: metric === "priority" ? r.priority_sum : r.count
     }));
   }, [top, metric]);
@@ -850,7 +856,7 @@ export default function IssueIntelligence2() {
                                 <div className="text-3xl font-semibold text-slateink-900">
                                   {Number(fwd?.multiple_hops?.chronic_ge3 || 0).toLocaleString()}
                                 </div>
-                                <div className="text-xs font-semibold text-rose-600">Critical Waste</div>
+                                <div className="text-xs font-semibold text-rose-600">Critical Edge Cases</div>
                               </div>
                             </div>
 
@@ -1022,7 +1028,8 @@ export default function IssueIntelligence2() {
                     title={`Top 10 Sub-Topics by ${metric === "priority" ? "Priority" : "Volume"}`}
                     subtitle={undefined}
                     data={chartRows}
-                    yKey="subTopic"
+                    yKey="subTopicDisplay"
+                    colorKey="subTopic"
                     valueKey="value"
                     height={460}
                     total={metric === "priority" ? null : Number(chartRows.reduce((a, r) => a + Number(r.count || 0), 0))}
@@ -1039,7 +1046,7 @@ export default function IssueIntelligence2() {
                             VOLUME LEADER
                           </div>
                         </div>
-                        <div className="mt-2 text-sm font-semibold text-slateink-900">{callouts?.volume_leader?.subTopic || "—"}</div>
+                        <div className="mt-2 text-sm font-semibold text-slateink-900">{showSubtopic(callouts?.volume_leader?.subTopic)}</div>
                         <div className="mt-1 text-2xl font-semibold text-indigo-700">
                           {callouts?.volume_leader?.count ?? "—"}
                           <span className="ml-2 text-xs font-semibold text-slateink-500">grievances</span>
@@ -1055,7 +1062,7 @@ export default function IssueIntelligence2() {
                             TOP PRIORITY
                           </div>
                         </div>
-                        <div className="mt-2 text-sm font-semibold text-slateink-900">{callouts?.priority_leader?.subTopic || "—"}</div>
+                        <div className="mt-2 text-sm font-semibold text-slateink-900">{showSubtopic(callouts?.priority_leader?.subTopic)}</div>
                         <div className="mt-1 text-2xl font-semibold text-slateink-900">
                           {callouts?.priority_leader?.priority_sum ?? "—"}
                           <span className="ml-2 text-xs font-semibold text-slateink-500">score sum</span>
@@ -1071,7 +1078,7 @@ export default function IssueIntelligence2() {
                             CRITICAL
                           </div>
                         </div>
-                        <div className="mt-2 text-sm font-semibold text-slateink-900">{callouts?.urgent_leader?.subTopic || "—"}</div>
+                        <div className="mt-2 text-sm font-semibold text-slateink-900">{showSubtopic(callouts?.urgent_leader?.subTopic)}</div>
                         <div className="mt-1 text-2xl font-semibold text-rose-700">
                           {callouts?.urgent_leader?.high_urgency_pct ?? "—"}%
                           <span className="ml-2 text-xs font-semibold text-slateink-500">High Urgency</span>
@@ -1102,7 +1109,7 @@ export default function IssueIntelligence2() {
                       >
                         {loadTrendOptions.map((s) => (
                           <option key={s} value={s}>
-                            {s}
+                            {showSubtopic(s)}
                           </option>
                         ))}
                       </select>
@@ -1127,7 +1134,7 @@ export default function IssueIntelligence2() {
                       <AlertTriangle className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="text-lg font-semibold">Pain View: Sub-Topic Pain Matrix</div>
+                      <div className="text-lg font-semibold">Sub-Topic (Issue) Priority Assessment Matrix</div>
                       <div className="text-xs text-white/70">Where to intervene • Resolution Time vs. Citizen Satisfaction</div>
                     </div>
                   </div>
@@ -1316,7 +1323,7 @@ export default function IssueIntelligence2() {
                                       className="h-2.5 w-2.5 rounded-full"
                                       style={{ background: dotColor(urgencyBySubtopic.get(r.subTopic) || "Low") }}
                                     />
-                                    <div className="text-sm font-semibold text-slateink-900">{r.subTopic}</div>
+                                    <div className="text-sm font-semibold text-slateink-900">{showSubtopic(r.subTopic)}</div>
                                   </div>
                                 </div>
                               </div>
