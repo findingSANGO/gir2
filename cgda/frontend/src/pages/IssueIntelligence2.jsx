@@ -4,6 +4,7 @@ import { api } from "../services/api.js";
 import { FiltersContext } from "../App.jsx";
 import { colorForKey } from "../utils/chartColors.js";
 import { displaySubtopicLabel } from "../utils/labels.js";
+import CaseListModal from "../components/CaseListModal.jsx";
 import {
   BarChart3,
   ClipboardList,
@@ -251,6 +252,101 @@ export default function IssueIntelligence2() {
   const [loadTrendLoading, setLoadTrendLoading] = useState(false);
   const [loadTrendError, setLoadTrendError] = useState("");
 
+  // Case list drilldown modal (read-only)
+  const [caseOpen, setCaseOpen] = useState(false);
+  const [caseTitle, setCaseTitle] = useState("Case list");
+  const [caseSubtitle, setCaseSubtitle] = useState("");
+  const [caseDrillField, setCaseDrillField] = useState(null);
+  const [caseDrillValue, setCaseDrillValue] = useState(null);
+
+  function openCases({ title, subtitle, field, value }) {
+    setCaseTitle(title || "Case list");
+    setCaseSubtitle(subtitle || "");
+    setCaseDrillField(field || null);
+    setCaseDrillValue(value == null ? null : value);
+    setCaseOpen(true);
+  }
+
+  // Triage & Action (slide 4 / key=hotspots)
+  const [triageHighOnly, setTriageHighOnly] = useState(false);
+  const [triagePageSize, setTriagePageSize] = useState(25);
+  const [triagePage, setTriagePage] = useState(0);
+  const [triageBusy, setTriageBusy] = useState(false);
+  const [triageError, setTriageError] = useState("");
+  const [triagePayload, setTriagePayload] = useState(null);
+  const [selectedGid, setSelectedGid] = useState("");
+
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [detail, setDetail] = useState(null);
+
+  const triageOffset = triagePage * triagePageSize;
+
+  // Load triage queue when slide is active (respects global filters)
+  useEffect(() => {
+    if (slide !== 3) return;
+    let cancelled = false;
+    (async () => {
+      setTriageBusy(true);
+      setTriageError("");
+      try {
+        const res = await api.triageList(filters, {
+          limit: triagePageSize,
+          offset: triageOffset,
+          highUrgencyOnly: triageHighOnly
+        });
+        if (cancelled) return;
+        setTriagePayload(res);
+      } catch (e) {
+        if (cancelled) return;
+        setTriagePayload(null);
+        setTriageError(e.message || "Failed to load triage queue");
+      } finally {
+        if (!cancelled) setTriageBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slide, filters, triagePageSize, triageOffset, triageHighOnly]);
+
+  // Default selection to first row
+  useEffect(() => {
+    if (slide !== 3) return;
+    const rows = triagePayload?.rows || [];
+    if (selectedGid) return;
+    if (!rows.length) return;
+    setSelectedGid(rows[0].grievance_id);
+  }, [slide, triagePayload, selectedGid]);
+
+  // Load selected grievance detail
+  useEffect(() => {
+    if (slide !== 3) return;
+    if (!selectedGid) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setDetailBusy(true);
+      setDetailError("");
+      try {
+        const res = await api.triageDetail(selectedGid, { source: filters?.source });
+        if (!cancelled) setDetail(res);
+      } catch (e) {
+        if (!cancelled) {
+          setDetail(null);
+          setDetailError(e.message || "Failed to load case details");
+        }
+      } finally {
+        if (!cancelled) setDetailBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slide, selectedGid, filters?.source]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -397,7 +493,7 @@ export default function IssueIntelligence2() {
     { key: "overview", label: "Overview" },
     { key: "load", label: "Issue Intelligence" },
     { key: "pain", label: "Priority Matrix" },
-    { key: "hotspots", label: "Hotspots" },
+    { key: "hotspots", label: "Triage and Action" },
     { key: "exceptions", label: "Exceptions" },
     { key: "ward", label: "Ward Ownership" },
     { key: "dept", label: "Department Performance" },
@@ -588,6 +684,15 @@ export default function IssueIntelligence2() {
 
   return (
     <div className="space-y-5">
+      <CaseListModal
+        open={caseOpen}
+        onClose={() => setCaseOpen(false)}
+        title={caseTitle}
+        subtitle={caseSubtitle}
+        filters={filters}
+        drillField={caseDrillField}
+        drillValue={caseDrillValue}
+      />
       {/* Navigation pills (global filter bar is above this page in Shell) */}
       <div
         className="sticky z-30 bg-slateink-50/80 backdrop-blur border-b border-slateink-100 -mx-4 lg:-mx-6 px-4 lg:px-6 py-1.5"
@@ -620,6 +725,15 @@ export default function IssueIntelligence2() {
                   ]}
                   height={320}
                   showLegend
+                  drilldownField="created_date"
+                  onDrilldown={({ value }) =>
+                    openCases({
+                      title: "Case list — Created on day",
+                      subtitle: "From Grievances Over Time",
+                      field: "created_date",
+                      value
+                    })
+                  }
                 />
               )}
 
@@ -699,7 +813,21 @@ export default function IssueIntelligence2() {
                                   tickFormatter={(v) => `${v}%`}
                                 />
                                 <Tooltip formatter={(v) => `${Number(v || 0).toFixed(2)}%`} />
-                                <Bar dataKey="pct" radius={[10, 10, 4, 4]} maxBarSize={72}>
+                                <Bar
+                                  dataKey="pct"
+                                  radius={[10, 10, 4, 4]}
+                                  maxBarSize={72}
+                                  onClick={(evt) => {
+                                    const b = evt?.payload?.bucket;
+                                    if (!b) return;
+                                    openCases({
+                                      title: "Case list — SLA bucket",
+                                      subtitle: "From Resolution Time Distribution (SLA)",
+                                      field: "resolution_bucket",
+                                      value: b
+                                    });
+                                  }}
+                                >
                                   {(distRows || []).map((_, idx) => (
                                     <Cell key={idx} fill="#2563eb" opacity={0.9} />
                                   ))}
@@ -800,7 +928,21 @@ export default function IssueIntelligence2() {
                                     }}
                                   />
                                   <Tooltip />
-                                  <Bar dataKey="count" radius={[10, 10, 4, 4]} maxBarSize={90}>
+                                  <Bar
+                                    dataKey="count"
+                                    radius={[10, 10, 4, 4]}
+                                    maxBarSize={90}
+                                    onClick={(evt) => {
+                                      const b = evt?.payload?.bucket;
+                                      if (!b) return;
+                                      openCases({
+                                        title: "Case list — Forwarding bucket",
+                                        subtitle: "From Forwarding Events Distribution",
+                                        field: "forward_bucket",
+                                        value: b
+                                      });
+                                    }}
+                                  >
                                     {(hopRows || []).map((_, idx) => (
                                       <Cell key={idx} fill="#2563eb" opacity={0.9} />
                                     ))}
@@ -1033,6 +1175,16 @@ export default function IssueIntelligence2() {
                     valueKey="value"
                     height={460}
                     total={metric === "priority" ? null : Number(chartRows.reduce((a, r) => a + Number(r.count || 0), 0))}
+                    drilldownField="ai_subtopic"
+                    drilldownValueKey="subTopic"
+                    onDrilldown={({ value }) =>
+                      openCases({
+                        title: "Case list — AI Subtopic",
+                        subtitle: "From Top Sub-Topics",
+                        field: "ai_subtopic",
+                        value
+                      })
+                    }
                   />
                 </div>
                 <div className="lg:col-span-4">
@@ -1237,6 +1389,16 @@ export default function IssueIntelligence2() {
                                 fill={dotColor("High")}
                                 onMouseEnter={(p) => setHoverSubtopic(p?.subTopic || "")}
                                 onMouseLeave={() => setHoverSubtopic("")}
+                                onClick={(p) => {
+                                  const s = p?.subTopic || p?.payload?.subTopic;
+                                  if (!s) return;
+                                  openCases({
+                                    title: "Case list — AI Subtopic",
+                                    subtitle: "From Priority Matrix bubble",
+                                    field: "ai_subtopic",
+                                    value: s
+                                  });
+                                }}
                                 shape={(p) => (
                                   <BubbleShape {...p} hoveredSubtopic={hoverSubtopic} showLabel={topLabelSet.has(p?.payload?.subTopic)} />
                                 )}
@@ -1246,6 +1408,16 @@ export default function IssueIntelligence2() {
                                 fill={dotColor("Med")}
                                 onMouseEnter={(p) => setHoverSubtopic(p?.subTopic || "")}
                                 onMouseLeave={() => setHoverSubtopic("")}
+                                onClick={(p) => {
+                                  const s = p?.subTopic || p?.payload?.subTopic;
+                                  if (!s) return;
+                                  openCases({
+                                    title: "Case list — AI Subtopic",
+                                    subtitle: "From Priority Matrix bubble",
+                                    field: "ai_subtopic",
+                                    value: s
+                                  });
+                                }}
                                 shape={(p) => (
                                   <BubbleShape {...p} hoveredSubtopic={hoverSubtopic} showLabel={topLabelSet.has(p?.payload?.subTopic)} />
                                 )}
@@ -1255,6 +1427,16 @@ export default function IssueIntelligence2() {
                                 fill={dotColor("Low")}
                                 onMouseEnter={(p) => setHoverSubtopic(p?.subTopic || "")}
                                 onMouseLeave={() => setHoverSubtopic("")}
+                                onClick={(p) => {
+                                  const s = p?.subTopic || p?.payload?.subTopic;
+                                  if (!s) return;
+                                  openCases({
+                                    title: "Case list — AI Subtopic",
+                                    subtitle: "From Priority Matrix bubble",
+                                    field: "ai_subtopic",
+                                    value: s
+                                  });
+                                }}
                                 shape={(p) => (
                                   <BubbleShape {...p} hoveredSubtopic={hoverSubtopic} showLabel={topLabelSet.has(p?.payload?.subTopic)} />
                                 )}
@@ -1354,8 +1536,267 @@ export default function IssueIntelligence2() {
             </div>
           ) : null}
 
-          {/* Placeholder for slides 4+ */}
-          {slide >= 3 ? (
+          {/* Slide 4: Triage & Action (repurposed Hotspots) */}
+          {slide === 3 ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-gradient-to-br from-slateink-950 via-slateink-900 to-indigo-950 ring-1 ring-slateink-900/30 px-5 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-white">
+                  <div>
+                    <div className="text-lg font-semibold">Triage and Action</div>
+                    <div className="text-xs text-white/70">Read-only case queue + AI Action Summary (ai_extra_summary)</div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={triageHighOnly}
+                      onChange={(e) => {
+                        setTriageHighOnly(e.target.checked);
+                        setTriagePage(0);
+                        setSelectedGid("");
+                      }}
+                    />
+                    High urgency only
+                  </label>
+                </div>
+              </div>
+
+              {triageError ? (
+                <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{triageError}</div>
+              ) : null}
+
+              <div className="grid gap-4 lg:grid-cols-12">
+                {/* LEFT COLUMN: queue + details */}
+                <div className="lg:col-span-6 space-y-4">
+                  <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slateink-100 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-semibold text-slateink-900">Case Queue</div>
+                        <div className="mt-1 text-xs text-slateink-500">
+                          {triageBusy ? "Loading…" : `${(triagePayload?.total_rows ?? 0).toLocaleString()} records`}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slateink-500">Rows</span>
+                        <select
+                          value={triagePageSize}
+                          onChange={(e) => {
+                            setTriagePageSize(Number(e.target.value));
+                            setTriagePage(0);
+                            setSelectedGid("");
+                          }}
+                          className="h-9 rounded-xl border border-slateink-200 bg-white px-3 text-xs font-semibold outline-none focus:border-gov-500 focus:ring-2 focus:ring-gov-100"
+                        >
+                          {[10, 25, 50, 100].map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs font-semibold tracking-wide text-slateink-500">
+                            <th className="py-2 px-4">Grievance ID</th>
+                            <th className="py-2 px-4">Created</th>
+                            <th className="py-2 px-4">Ward</th>
+                            <th className="py-2 px-4">Department</th>
+                            <th className="py-2 px-4">Status</th>
+                            <th className="py-2 px-4">Urgency</th>
+                            <th className="py-2 px-4">Subtopic</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slateink-100">
+                          {triageBusy && !(triagePayload?.rows || []).length ? (
+                            <tr>
+                              <td colSpan={7} className="py-6 px-4 text-slateink-500">
+                                Loading…
+                              </td>
+                            </tr>
+                          ) : !(triagePayload?.rows || []).length ? (
+                            <tr>
+                              <td colSpan={7} className="py-6 px-4 text-slateink-500">
+                                No cases found for this selection.
+                              </td>
+                            </tr>
+                          ) : (
+                            (triagePayload?.rows || []).map((r) => {
+                              const active = r.grievance_id === selectedGid;
+                              return (
+                                <tr
+                                  key={r.grievance_id}
+                                  className={"cursor-pointer " + (active ? "bg-indigo-50/60" : "hover:bg-slateink-50/60")}
+                                  onClick={() => setSelectedGid(r.grievance_id)}
+                                >
+                                  <td className="py-2 px-4 font-mono text-xs">{r.grievance_id}</td>
+                                  <td className="py-2 px-4">{r.created_date || "—"}</td>
+                                  <td className="py-2 px-4">{r.ward_name || "—"}</td>
+                                  <td className="py-2 px-4">{r.department_name || "—"}</td>
+                                  <td className="py-2 px-4">{r.status || "—"}</td>
+                                  <td className="py-2 px-4">
+                                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-slateink-200 bg-white">
+                                      {r.ai_urgency || "—"}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-4">{showSubtopic(r.ai_subtopic)}</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="px-5 py-4 border-t border-slateink-100 flex items-center justify-between gap-3">
+                      <div className="text-xs text-slateink-500">
+                        Showing{" "}
+                        <span className="font-semibold">
+                          {(triagePayload?.total_rows || 0)
+                            ? `${triageOffset + 1}-${Math.min(triageOffset + triagePageSize, triagePayload?.total_rows || 0)}`
+                            : "0"}
+                        </span>{" "}
+                        of <span className="font-semibold">{(triagePayload?.total_rows || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="h-9 rounded-xl border border-slateink-200 bg-white px-3 text-xs font-semibold text-slateink-700 hover:bg-slateink-50 disabled:opacity-50"
+                          disabled={triagePage <= 0}
+                          onClick={() => setTriagePage((p) => Math.max(0, p - 1))}
+                        >
+                          Prev
+                        </button>
+                        <button
+                          type="button"
+                          className="h-9 rounded-xl border border-slateink-200 bg-white px-3 text-xs font-semibold text-slateink-700 hover:bg-slateink-50 disabled:opacity-50"
+                          disabled={triageOffset + triagePageSize >= (triagePayload?.total_rows || 0)}
+                          onClick={() => setTriagePage((p) => p + 1)}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slateink-100">
+                      <div className="text-lg font-semibold text-slateink-900">Case Details</div>
+                      <div className="mt-1 text-xs text-slateink-500">Selected grievance record (read-only)</div>
+                    </div>
+                    <div className="p-5">
+                      {detailError ? (
+                        <div className="rounded-xl bg-white p-4 ring-1 ring-slateink-100 text-sm text-rose-700">{detailError}</div>
+                      ) : detailBusy ? (
+                        <div className="text-sm text-slateink-500">Loading case details…</div>
+                      ) : !detail ? (
+                        <div className="text-sm text-slateink-500">Select a grievance from the queue to view details.</div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Grievance ID</div>
+                              <div className="mt-1 font-mono text-xs text-slateink-900">{detail.grievance_id}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Created</div>
+                              <div className="mt-1 text-sm font-semibold text-slateink-900">{detail.created_date || "—"}</div>
+                              <div className="text-xs text-slateink-500">{detail.created_at || ""}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Ward</div>
+                              <div className="mt-1 text-sm text-slateink-900">{detail.ward_name || "—"}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Department</div>
+                              <div className="mt-1 text-sm text-slateink-900">{detail.department_name || "—"}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Status</div>
+                              <div className="mt-1 text-sm text-slateink-900">{detail.status || "—"}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Forwarding</div>
+                              <div className="mt-1 text-sm text-slateink-900">
+                                {detail.forward_count ?? 0} forward(s)
+                                <span className="ml-2 text-xs text-slateink-500">{detail.forwarded_at || ""}</span>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Closed date</div>
+                              <div className="mt-1 text-sm text-slateink-900">{detail.closed_date || "—"}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slateink-500">Rating</div>
+                              <div className="mt-1 text-sm text-slateink-900">{detail.feedback_rating ?? "—"}</div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-semibold text-slateink-500">Subject</div>
+                            <div className="mt-2 max-h-[120px] overflow-auto rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3 text-sm text-slateink-900 whitespace-pre-wrap">
+                              {detail.subject || "—"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-semibold text-slateink-500">Description</div>
+                            <div className="mt-2 max-h-[200px] overflow-auto rounded-xl bg-slateink-50 ring-1 ring-slateink-100 p-3 text-sm text-slateink-900 whitespace-pre-wrap">
+                              {detail.description || "—"}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT COLUMN: AI action panel */}
+                <div className="lg:col-span-6">
+                  <div className="rounded-2xl bg-white ring-1 ring-slateink-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slateink-100">
+                      <div className="text-lg font-semibold text-slateink-900">AI Action Summary</div>
+                      <div className="mt-1 text-xs text-slateink-500">Generated from ai_extra_summary (read-only)</div>
+                    </div>
+                    <div className="p-5">
+                      {detailBusy ? (
+                        <div className="text-sm text-slateink-500">Loading…</div>
+                      ) : !detail ? (
+                        <div className="text-sm text-slateink-500">Select a grievance from the queue to view the AI summary.</div>
+                      ) : (
+                        <>
+                          <div className="rounded-2xl bg-indigo-50/60 ring-1 ring-indigo-100 p-5">
+                            <div className="text-sm font-semibold text-indigo-900">Recommended brief / action</div>
+                            <div className="mt-3 text-base leading-relaxed text-slateink-900 whitespace-pre-wrap">
+                              {detail.ai_extra_summary || "AI summary not available for this record."}
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {[
+                              ["Urgency", detail.ai_urgency],
+                              ["Sentiment", detail.ai_sentiment],
+                              ["Confidence", detail.ai_confidence],
+                              ["Subtopic", showSubtopic(detail.ai_subtopic)]
+                            ].map(([k, v]) => (
+                              <span key={k} className="inline-flex items-center gap-2 rounded-full bg-white ring-1 ring-slateink-200 px-3 py-1 text-xs">
+                                <span className="font-semibold text-slateink-600">{k}:</span>
+                                <span className="font-semibold text-slateink-900">{v || "—"}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Placeholder for slides 5+ */}
+          {slide >= 4 ? (
             <div className="rounded-2xl bg-slateink-50 ring-1 ring-slateink-100 p-8 text-center">
               <div className="text-lg font-semibold text-slateink-900">{slides[slide]?.label} (Coming next)</div>
               <div className="mt-2 text-sm text-slateink-600">

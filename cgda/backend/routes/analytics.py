@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from auth import User, require_role
@@ -149,6 +149,354 @@ def dataset_quality(
         "closed_date_rows": closed_known,
         "star_rating_rows": rating_known,
         "closed_date_and_star_rating_rows": both_known,
+    }
+
+
+@router.get("/cases")
+def cases(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    db: Session = Depends(get_db),
+    # Standard global filters (match dashboard behavior)
+    start_date: str | None = None,
+    end_date: str | None = None,
+    wards: str | None = None,
+    department: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+    # Pagination
+    limit: int = 50,
+    offset: int = 0,
+    # Drilldown filter (from chart click)
+    drill_field: str | None = None,
+    drill_value: str | None = None,
+):
+    """
+    Paginated, read-only grievance case list for drill-down from charts.
+
+    Returns a filtered list of rows from grievances_processed, applying:
+    - global filters (date/ward/department/category/source), consistent with analytics logic
+    - an optional drilldown constraint (e.g., ai_subtopic == X, created_date == YYYY-MM-DD, etc.)
+
+    Drilldown fields supported:
+    - ai_subtopic
+    - ai_category
+    - ward_name
+    - department_name
+    - status
+    - created_date (YYYY-MM-DD)
+    - closed_date (YYYY-MM-DD)
+    - feedback_rating (1..5)
+    - resolution_bucket (bucket label e.g. "0-1 Day", "1-3 Days", "60+ Days")
+    - forward_bucket (bucket label e.g. "1 Time", "2 Times", "3+ Times")
+    """
+    import datetime as dt
+    from sqlalchemy import and_, func, select
+    from models import GrievanceProcessed
+
+    limit = max(1, min(int(limit or 50), 500))
+    offset = max(0, int(offset or 0))
+
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
+
+    # Determine base selection consistent with dashboard behavior (include undated when range covers full dated span).
+    if f.start_date is None or f.end_date is None:
+        # Fallback: if filters are missing dates, default to a safe wide window.
+        # (UI always sends dates, but this keeps the endpoint robust.)
+        s = dt.date(1900, 1, 1)
+        e = dt.date.today()
+    else:
+        s = f.start_date
+        e = f.end_date
+
+    base = _svc()._processed_filter_subquery(
+        db,
+        start_date=s,
+        end_date=e,
+        wards=f.wards,
+        department=f.department,
+        category=f.category,
+        source=f.source,
+    )
+
+    def _parse_date(v: str) -> dt.date:
+        return dt.datetime.strptime(v, "%Y-%m-%d").date()
+
+    def _norm(v: str) -> str:
+        return str(v or "").strip()
+
+    drill_conds = []
+    if drill_field and drill_value is not None:
+        field = _norm(drill_field)
+        value = _norm(drill_value)
+
+        # Equality filters (trimmed) for text-ish fields.
+        if field == "ai_subtopic":
+            drill_conds.append(func.trim(base.c.ai_subtopic) == value)
+        elif field == "ai_category":
+            drill_conds.append(func.trim(base.c.ai_category) == value)
+        elif field == "ward_name":
+            drill_conds.append(func.trim(base.c.ward_name) == value)
+        elif field == "department_name":
+            drill_conds.append(func.trim(base.c.department_name) == value)
+        elif field == "status":
+            drill_conds.append(func.trim(base.c.status) == value)
+        elif field == "created_date":
+            drill_conds.append(base.c.created_date == _parse_date(value))
+        elif field == "closed_date":
+            drill_conds.append(base.c.closed_date == _parse_date(value))
+        elif field == "feedback_rating":
+            try:
+                r = float(value)
+            except Exception:
+                r = None
+            if r is not None:
+                drill_conds.append(base.c.feedback_rating == r)
+        elif field == "forward_bucket":
+            vlow = value.lower()
+            if vlow.startswith("1"):
+                drill_conds.append(base.c.forward_count == 1)
+            elif vlow.startswith("2"):
+                drill_conds.append(base.c.forward_count == 2)
+            elif "3+" in vlow or vlow.startswith("3"):
+                drill_conds.append(base.c.forward_count >= 3)
+        elif field == "resolution_bucket":
+            # Accept labels like "0-1 Day", "1-3 Days", "30-60 Days", "60+ Days"
+            vlow = value.lower().replace("days", "day").replace(" ", "")
+            if "+" in vlow:
+                # "60+day" -> min=60
+                try:
+                    mn = int(vlow.split("+", 1)[0])
+                except Exception:
+                    mn = None
+                if mn is not None:
+                    drill_conds.append(base.c.resolution_days.is_not(None))
+                    drill_conds.append(base.c.resolution_days >= mn)
+            elif "-" in vlow:
+                try:
+                    a, b = vlow.split("-", 1)
+                    # strip trailing 'day'
+                    b = b.replace("day", "")
+                    mn = int(a)
+                    mx = int(b)
+                except Exception:
+                    mn = mx = None
+                if mn is not None and mx is not None:
+                    drill_conds.append(base.c.resolution_days.is_not(None))
+                    drill_conds.append(base.c.resolution_days >= mn)
+                    drill_conds.append(base.c.resolution_days <= mx)
+        else:
+            # Unknown drill field: ignore (safe default)
+            pass
+
+    # Total rows for pagination
+    total = int(db.scalar(select(func.count()).select_from(base).where(and_(*drill_conds))) or 0)
+
+    # Select only the fields we show in the UI case list (keeps payload small & stable).
+    q = (
+        select(
+            base.c.grievance_id,
+            base.c.created_date,
+            base.c.ward_name,
+            base.c.department_name,
+            base.c.status,
+            base.c.ai_subtopic,
+            base.c.ai_urgency,
+            base.c.ai_sentiment,
+            base.c.resolution_days,
+            base.c.forward_count,
+            base.c.feedback_rating,
+            base.c.subject,
+            base.c.description,
+        )
+        .select_from(base)
+        .where(and_(*drill_conds))
+        .order_by(base.c.created_date.desc().nullslast(), base.c.created_at.desc().nullslast())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    out_rows = []
+    for r in db.execute(q).all():
+        out_rows.append(
+            {
+                "grievance_id": r.grievance_id,
+                "created_date": r.created_date.isoformat() if r.created_date else None,
+                "ward": r.ward_name,
+                "department": r.department_name,
+                "status": r.status,
+                "ai_subtopic": r.ai_subtopic,
+                "ai_urgency": r.ai_urgency,
+                "ai_sentiment": r.ai_sentiment,
+                "resolution_days": r.resolution_days,
+                "forward_count": int(r.forward_count or 0),
+                "feedback_rating": r.feedback_rating,
+                "subject": r.subject,
+                "description": r.description,
+            }
+        )
+
+    return {
+        "source": f.source,
+        "filters": {
+            "start_date": (s.isoformat() if s else None),
+            "end_date": (e.isoformat() if e else None),
+            "wards": f.wards,
+            "department": f.department,
+            "category": f.category,
+        },
+        "drilldown": {"field": drill_field, "value": drill_value} if drill_field else None,
+        "offset": offset,
+        "limit": limit,
+        "total_rows": total,
+        "rows": out_rows,
+    }
+
+
+@router.get("/triage/list")
+def triage_list(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    db: Session = Depends(get_db),
+    # Standard global filters (match dashboard behavior)
+    start_date: str | None = None,
+    end_date: str | None = None,
+    wards: str | None = None,
+    department: str | None = None,
+    category: str | None = None,
+    source: str | None = None,
+    # Triage-only quick filter
+    high_urgency_only: bool = False,
+    # Pagination
+    limit: int = 50,
+    offset: int = 0,
+):
+    """
+    Case-queue list for the Deep Dive → "Triage and Action" page.
+    Read-only, paginated.
+    """
+    import datetime as dt
+    from sqlalchemy import case, func, select
+
+    limit = max(1, min(int(limit or 50), 500))
+    offset = max(0, int(offset or 0))
+
+    f = _parse_filters(start_date, end_date, wards, department, category, source)
+    if f.start_date is None or f.end_date is None:
+        s = dt.date(1900, 1, 1)
+        e = dt.date.today()
+    else:
+        s = f.start_date
+        e = f.end_date
+
+    base = _svc()._processed_filter_subquery(
+        db,
+        start_date=s,
+        end_date=e,
+        wards=f.wards,
+        department=f.department,
+        category=f.category,
+        source=f.source,
+    )
+
+    conds = []
+    if high_urgency_only:
+        conds.append(func.trim(base.c.ai_urgency) == "High")
+
+    # Triage ordering: High urgency first, then newest first.
+    urgency_rank = case(
+        (func.trim(base.c.ai_urgency) == "High", 0),
+        (func.trim(base.c.ai_urgency) == "Med", 1),
+        (func.trim(base.c.ai_urgency) == "Low", 2),
+        else_=3,
+    )
+
+    total = int(db.scalar(select(func.count()).select_from(base).where(*conds)) or 0)
+    q = (
+        select(
+            base.c.grievance_id,
+            base.c.created_date,
+            base.c.ward_name,
+            base.c.department_name,
+            base.c.status,
+            base.c.ai_urgency,
+            base.c.ai_subtopic,
+        )
+        .select_from(base)
+        .where(*conds)
+        .order_by(urgency_rank.asc(), base.c.created_date.desc().nullslast(), base.c.created_at.desc().nullslast())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    out_rows = []
+    for r in db.execute(q).all():
+        out_rows.append(
+            {
+                "grievance_id": r.grievance_id,
+                "created_date": r.created_date.isoformat() if r.created_date else None,
+                "ward_name": r.ward_name,
+                "department_name": r.department_name,
+                "status": r.status,
+                "ai_urgency": r.ai_urgency,
+                "ai_subtopic": r.ai_subtopic,
+            }
+        )
+
+    return {
+        "source": f.source,
+        "high_urgency_only": bool(high_urgency_only),
+        "offset": offset,
+        "limit": limit,
+        "total_rows": total,
+        "rows": out_rows,
+    }
+
+
+@router.get("/triage/{grievance_id}")
+def triage_detail(
+    _: Annotated[User, Depends(require_role("admin", "commissioner"))],
+    grievance_id: str,
+    db: Session = Depends(get_db),
+    source: str | None = None,
+):
+    """
+    Full read-only record details for Deep Dive → "Triage and Action".
+    """
+    from sqlalchemy import select
+    from models import GrievanceProcessed
+
+    gid = (grievance_id or "").strip()
+    if not gid:
+        raise HTTPException(status_code=400, detail="grievance_id is required")
+
+    q = select(GrievanceProcessed).where(GrievanceProcessed.grievance_id == gid)
+    if source:
+        q = q.where(GrievanceProcessed.source_raw_filename == str(source).strip())
+
+    r = db.execute(q).scalars().first()
+    if not r:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+    return {
+        "grievance_id": r.grievance_id,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "created_date": r.created_date.isoformat() if r.created_date else None,
+        "ward_name": r.ward_name,
+        "department_name": r.department_name,
+        "status": r.status,
+        "subject": r.subject,
+        "description": r.description,
+        "forwarded_at": r.forwarded_at.isoformat() if r.forwarded_at else None,
+        "forward_count": int(r.forward_count or 0),
+        "closed_date": r.closed_date.isoformat() if r.closed_date else None,
+        "feedback_rating": r.feedback_rating,
+        "resolution_days": r.resolution_days,
+        # AI summary + metadata
+        "ai_extra_summary": r.ai_extra_summary,
+        "ai_urgency": r.ai_urgency,
+        "ai_sentiment": r.ai_sentiment,
+        "ai_confidence": r.ai_confidence,
+        "ai_subtopic": r.ai_subtopic,
+        "ai_category": r.ai_category,
     }
 
 

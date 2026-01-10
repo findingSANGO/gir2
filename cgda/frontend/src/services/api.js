@@ -98,6 +98,16 @@ export const api = {
   datasetsProcessed: () => request("/api/analytics/datasets_processed"),
   datasetQuality: (source) => request(`/api/analytics/dataset_quality${toQuery({ source })}`),
   aiCoverage: (source) => request(`/api/analytics/ai_coverage${toQuery({ source })}`),
+  cases: (params, { limit = 50, offset = 0, drillField = null, drillValue = null } = {}) =>
+    request(
+      `/api/analytics/cases${toQuery({
+        ...(params || {}),
+        limit,
+        offset,
+        drill_field: drillField || undefined,
+        drill_value: drillValue == null ? undefined : String(drillValue)
+      })}`
+    ),
   closureSlaSnapshot: (params) => request(`/api/analytics/closure_sla_snapshot${toQuery(params)}`),
   forwardingSnapshot: (params) => request(`/api/analytics/forwarding_snapshot${toQuery(params)}`),
   forwardingImpactResolution: (params) => request(`/api/analytics/forwarding_impact_resolution${toQuery(params)}`),
@@ -107,6 +117,17 @@ export const api = {
   closure: (params) => request(`/api/analytics/closure${toQuery(params)}`),
   predictive: (params) => request(`/api/analytics/predictive${toQuery(params)}`),
   wordcloud: (params, topN = 60) => request(`/api/analytics/wordcloud${toQuery({ ...(params || {}), top_n: topN })}`),
+  triageList: (params, { limit = 50, offset = 0, highUrgencyOnly = false } = {}) =>
+    request(
+      `/api/analytics/triage/list${toQuery({
+        ...(params || {}),
+        limit,
+        offset,
+        high_urgency_only: highUrgencyOnly ? "true" : "false"
+      })}`
+    ),
+  triageDetail: (grievanceId, { source = null } = {}) =>
+    request(`/api/analytics/triage/${encodeURIComponent(grievanceId)}${toQuery({ source: source || undefined })}`),
 
   // Date-range analytics (NO Gemini calls; reads grievances_processed)
   executiveOverview: (params) => request(`/api/analytics/executive-overview${toQuery(params)}`),
@@ -286,6 +307,11 @@ function toQuery(params) {
   if (params.department) q.set("department", params.department);
   if (params.category) q.set("category", params.category);
   if (params.ai_category) q.set("ai_category", params.ai_category);
+  if (params.limit != null) q.set("limit", String(params.limit));
+  if (params.offset != null) q.set("offset", String(params.offset));
+  if (params.drill_field) q.set("drill_field", params.drill_field);
+  if (params.drill_value != null) q.set("drill_value", String(params.drill_value));
+  if (params.high_urgency_only != null) q.set("high_urgency_only", String(params.high_urgency_only));
   if (params.ward_focus) q.set("ward_focus", params.ward_focus);
   if (params.department_focus) q.set("department_focus", params.department_focus);
   if (params.subtopic_focus) q.set("subtopic_focus", params.subtopic_focus);

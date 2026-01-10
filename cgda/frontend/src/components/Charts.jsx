@@ -103,8 +103,12 @@ export function BarCard({
   ai = false,
   total,
   showLegend = false,
-  xTickFormatter
+  xTickFormatter,
+  onDrilldown,
+  drilldownField,
+  drilldownValueKey
 }) {
+  const dKey = drilldownValueKey || xKey;
   return (
     <ChartShell title={title} subtitle={subtitle} right={right} ai={ai}>
       {!data ? (
@@ -147,6 +151,16 @@ export function BarCard({
                   fill={b.color || "#2b54f6"} // gov-600
                   radius={[10, 10, 4, 4]}
                   maxBarSize={52}
+                  onClick={
+                    onDrilldown && drilldownField
+                      ? (evt) => {
+                          const datum = evt?.payload || null;
+                          const value = datum ? datum?.[dKey] : null;
+                          if (value == null) return;
+                          onDrilldown({ field: drilldownField, value, datum });
+                        }
+                      : undefined
+                  }
                 >
                   {b.colorByX
                     ? (data || []).map((d) => <Cell key={String(d?.[xKey])} fill={colorForKey(d?.[xKey])} />)
@@ -172,10 +186,14 @@ export function VerticalBarCard({
   height = 320,
   ai = false,
   total,
-  showLegend = false
+  showLegend = false,
+  onDrilldown,
+  drilldownField,
+  drilldownValueKey
 }) {
   // Expect [{[yKey]: string, [valueKey]: number}]
   const ck = colorKey || yKey;
+  const dKey = drilldownValueKey || yKey;
   return (
     <ChartShell title={title} subtitle={subtitle} right={right} ai={ai}>
       {!data ? (
@@ -215,7 +233,20 @@ export function VerticalBarCard({
               {showLegend ? (
                 <Legend wrapperStyle={{ fontSize: 12, color: "#64748b" }} iconType="circle" />
               ) : null}
-              <Bar dataKey={valueKey} radius={[10, 10, 10, 10]}>
+              <Bar
+                dataKey={valueKey}
+                radius={[10, 10, 10, 10]}
+                onClick={
+                  onDrilldown && drilldownField
+                    ? (evt) => {
+                        const datum = evt?.payload || null;
+                        const value = datum ? datum?.[dKey] : null;
+                        if (value == null) return;
+                        onDrilldown({ field: drilldownField, value, datum });
+                      }
+                    : undefined
+                }
+              >
                 {(data || []).map((d) => (
                   <Cell key={String(d?.[ck] ?? d?.[yKey])} fill={colorForKey(d?.[ck])} />
                 ))}
@@ -228,7 +259,21 @@ export function VerticalBarCard({
   );
 }
 
-export function LineCard({ title, subtitle, right, data, xKey, lines, height = 260, ai = false, showLegend = false }) {
+export function LineCard({
+  title,
+  subtitle,
+  right,
+  data,
+  xKey,
+  lines,
+  height = 260,
+  ai = false,
+  showLegend = false,
+  onDrilldown,
+  drilldownField,
+  drilldownValueKey
+}) {
+  const dKey = drilldownValueKey || xKey;
   return (
     <ChartShell title={title} subtitle={subtitle} right={right} ai={ai}>
       {!data ? (
@@ -241,7 +286,20 @@ export function LineCard({ title, subtitle, right, data, xKey, lines, height = 2
       ) : (
         <div style={{ height }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
+            <LineChart
+              data={data}
+              margin={{ top: 6, right: 10, left: 0, bottom: 0 }}
+              onClick={
+                onDrilldown && drilldownField
+                  ? (state) => {
+                      const ap = state?.activePayload?.[0]?.payload || null;
+                      const value = ap ? ap?.[dKey] : state?.activeLabel;
+                      if (value == null) return;
+                      onDrilldown({ field: drilldownField, value, datum: ap });
+                    }
+                  : undefined
+              }
+            >
               <CartesianGrid strokeDasharray="2 10" stroke={GRID_STROKE} vertical={false} />
               <XAxis dataKey={xKey} tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={14} />
               <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
