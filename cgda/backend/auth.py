@@ -1,3 +1,4 @@
+"""Authentication module for the CGDA backend."""
 from __future__ import annotations
 
 import datetime as dt
